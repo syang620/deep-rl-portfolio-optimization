@@ -1,0 +1,20 @@
+raw_start_date: "2007-01-01"
+model_start_date: "2010-01-01"
+
+train_start_date: "2010-01-01"
+train_end_date: "2023-12-31"
+
+validation_start_date: "2024-01-01"
+validation_end_date: "2024-12-31"
+
+test_start_date: "2025-01-01"
+test_end_date: null
+
+market_data_source: yfinance
+macro_data_source: fred
+
+storage:
+  duckdb_path: data/duckdb/portfolio.duckdb
+  raw_parquet_dir: data/raw
+  interim_parquet_dir: data/interim
+  processed_parquet_dir: data/processed

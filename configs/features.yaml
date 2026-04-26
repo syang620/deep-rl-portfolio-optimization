@@ -1,0 +1,17 @@
+feature_version: v1
+
+return_windows: [1, 5, 21, 63, 126, 252]
+volatility_windows: [21, 63]
+drawdown_windows: [63]
+rsi_windows: [14]
+price_z_windows: [20, 50]
+correlation_windows: [63]
+
+winsorization:
+  enabled: true
+  lower_quantile: 0.005
+  upper_quantile: 0.995
+
+normalization:
+  method: standard_scaler
+  fit_split: train

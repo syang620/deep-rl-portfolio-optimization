@@ -1,0 +1,31 @@
+universe_name: liquid_global_etf_v1
+
+assets:
+  - ticker: SPY
+    asset_class: us_large_cap_equity
+  - ticker: QQQ
+    asset_class: us_growth_equity
+  - ticker: IWM
+    asset_class: us_small_cap_equity
+  - ticker: EFA
+    asset_class: developed_ex_us_equity
+  - ticker: EEM
+    asset_class: emerging_market_equity
+  - ticker: TLT
+    asset_class: long_treasury
+  - ticker: IEF
+    asset_class: intermediate_treasury
+  - ticker: SHY
+    asset_class: short_treasury_cash_proxy
+  - ticker: LQD
+    asset_class: investment_grade_credit
+  - ticker: HYG
+    asset_class: high_yield_credit
+  - ticker: GLD
+    asset_class: gold
+  - ticker: DBC
+    asset_class: broad_commodities
+  - ticker: VNQ
+    asset_class: real_estate
+  - ticker: XLU
+    asset_class: defensive_equity_sector

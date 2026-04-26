@@ -5,10 +5,13 @@ resource allocation with a focus on dynamic portfolio optimization.
 
 ## Local Setup
 
-1. Create or refresh the local virtual environment:
-   `python3 -m venv .venv`
+1. Create the Conda environment:
+   `conda create -n drl-portfolio-opt python=3.11`
 2. Activate it:
-   `source .venv/bin/activate`
+   `conda activate drl-portfolio-opt`
+3. If activation is not available in the current shell, initialize Conda for
+   `zsh` first:
+   `conda init zsh`
 
 ## Status
 
