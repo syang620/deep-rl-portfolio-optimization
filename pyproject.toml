@@ -8,8 +8,10 @@ version = "0.1.0"
 description = "Deep reinforcement learning for dynamic portfolio optimization."
 requires-python = ">=3.11"
 dependencies = [
+    "pandas>=2.2",
     "pydantic>=2.7",
     "PyYAML>=6.0",
+    "yfinance>=0.2",
 ]
 
 [project.optional-dependencies]
