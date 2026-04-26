@@ -50,6 +50,28 @@ class StorageConfig(StrictConfigModel):
     processed_parquet_dir: Path
 
 
+class MacroSeriesConfig(StrictConfigModel):
+    series_id: str
+    description: str
+    frequency: str
+
+    @field_validator("series_id")
+    @classmethod
+    def normalize_series_id(cls, value: str) -> str:
+        series_id = value.strip().upper()
+        if not series_id:
+            raise ValueError("series_id must not be empty")
+        return series_id
+
+    @field_validator("frequency")
+    @classmethod
+    def require_daily_frequency(cls, value: str) -> str:
+        frequency = value.strip().lower()
+        if frequency != "daily":
+            raise ValueError("macro series frequency must be daily")
+        return frequency
+
+
 class DataConfig(StrictConfigModel):
     raw_start_date: date
     model_start_date: date
@@ -61,6 +83,7 @@ class DataConfig(StrictConfigModel):
     test_end_date: date | None
     market_data_source: str
     macro_data_source: str
+    macro_series: list[MacroSeriesConfig] = Field(min_length=1)
     storage: StorageConfig
 
     @model_validator(mode="after")
@@ -81,6 +104,13 @@ class DataConfig(StrictConfigModel):
             raise ValueError("validation_end_date must be before test_start_date")
         if self.test_end_date is not None and self.test_start_date > self.test_end_date:
             raise ValueError("test_start_date must be on or before test_end_date")
+        return self
+
+    @model_validator(mode="after")
+    def require_unique_macro_series(self) -> DataConfig:
+        series_ids = [series.series_id for series in self.macro_series]
+        if len(series_ids) != len(set(series_ids)):
+            raise ValueError("macro_series must not contain duplicate series_id values")
         return self
 
 

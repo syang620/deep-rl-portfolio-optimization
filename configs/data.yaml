@@ -13,6 +13,29 @@ test_end_date: null
 market_data_source: yfinance
 macro_data_source: fred
 
+macro_series:
+  - series_id: VIXCLS
+    description: CBOE Volatility Index
+    frequency: daily
+  - series_id: DTB3
+    description: 3-month Treasury bill secondary market rate
+    frequency: daily
+  - series_id: DGS2
+    description: 2-year Treasury constant maturity rate
+    frequency: daily
+  - series_id: DGS10
+    description: 10-year Treasury constant maturity rate
+    frequency: daily
+  - series_id: T10Y2Y
+    description: 10-year minus 2-year Treasury yield spread
+    frequency: daily
+  - series_id: BAMLH0A0HYM2
+    description: ICE BofA US High Yield Index option-adjusted spread
+    frequency: daily
+  - series_id: BAMLC0A0CM
+    description: ICE BofA US Corporate Index option-adjusted spread
+    frequency: daily
+
 storage:
   duckdb_path: data/duckdb/portfolio.duckdb
   raw_parquet_dir: data/raw

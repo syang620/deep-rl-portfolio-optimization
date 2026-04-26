@@ -25,6 +25,15 @@ def test_valid_repo_configs_load_successfully() -> None:
 
     assert universe.tickers[:3] == ["SPY", "QQQ", "IWM"]
     assert data.train_start_date.isoformat() == "2010-01-01"
+    assert [series.series_id for series in data.macro_series] == [
+        "VIXCLS",
+        "DTB3",
+        "DGS2",
+        "DGS10",
+        "T10Y2Y",
+        "BAMLH0A0HYM2",
+        "BAMLC0A0CM",
+    ]
     assert features.feature_version == "v1"
     assert env.max_episode_steps == 52
 
@@ -109,6 +118,10 @@ test_start_date: "2025-01-01"
 test_end_date: null
 market_data_source: yfinance
 macro_data_source: fred
+macro_series:
+  - series_id: VIXCLS
+    description: CBOE Volatility Index
+    frequency: daily
 storage:
   duckdb_path: data/duckdb/portfolio.duckdb
   raw_parquet_dir: data/raw
@@ -119,6 +132,45 @@ storage:
     )
 
     with pytest.raises(ValidationError, match="train_end_date"):
+        load_data_config(config_path)
+
+
+def test_duplicate_macro_series_fail(tmp_path: Path) -> None:
+    config_path = tmp_path / "data.yaml"
+    config_path.write_text(
+        _data_config_yaml(
+            """
+macro_series:
+  - series_id: VIXCLS
+    description: CBOE Volatility Index
+    frequency: daily
+  - series_id: vixcls
+    description: Duplicate VIX
+    frequency: daily
+"""
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="duplicate series_id"):
+        load_data_config(config_path)
+
+
+def test_monthly_macro_series_fail(tmp_path: Path) -> None:
+    config_path = tmp_path / "data.yaml"
+    config_path.write_text(
+        _data_config_yaml(
+            """
+macro_series:
+  - series_id: CPIAUCSL
+    description: Consumer Price Index
+    frequency: monthly
+"""
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="frequency must be daily"):
         load_data_config(config_path)
 
 
@@ -139,3 +191,24 @@ transaction_cost_bps: 10.0
 
     with pytest.raises(ValidationError, match="max_episode_steps"):
         load_env_config(config_path)
+
+
+def _data_config_yaml(macro_series_yaml: str) -> str:
+    return f"""
+raw_start_date: "2007-01-01"
+model_start_date: "2010-01-01"
+train_start_date: "2010-01-01"
+train_end_date: "2023-12-31"
+validation_start_date: "2024-01-01"
+validation_end_date: "2024-12-31"
+test_start_date: "2025-01-01"
+test_end_date: null
+market_data_source: yfinance
+macro_data_source: fred
+{macro_series_yaml.strip()}
+storage:
+  duckdb_path: data/duckdb/portfolio.duckdb
+  raw_parquet_dir: data/raw
+  interim_parquet_dir: data/interim
+  processed_parquet_dir: data/processed
+"""
