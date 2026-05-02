@@ -21,11 +21,13 @@ CONFIG_DIR = REPO_ROOT / "configs"
 
 
 def test_build_feature_spec_from_repo_configs_preserves_asset_order() -> None:
+    features_config = load_features_config(CONFIG_DIR / "features.yaml")
     spec = build_feature_spec(
         load_universe_config(CONFIG_DIR / "universe.yaml"),
-        load_features_config(CONFIG_DIR / "features.yaml"),
+        features_config,
     )
 
+    assert features_config.market.benchmark_ticker == "SPY"
     assert spec.asset_order == [
         "SPY",
         "QQQ",
@@ -161,6 +163,11 @@ def _feature_config() -> FeaturesConfig:
     return FeaturesConfig.model_validate(
         {
             "feature_version": "v1",
+            "market": {
+                "benchmark_ticker": "SPY",
+                "credit_proxy_safe_ticker": "IEF",
+                "credit_proxy_risk_ticker": "HYG",
+            },
             "return_windows": [1, 5, 21, 63, 126, 252],
             "volatility_windows": [21, 63],
             "drawdown_windows": [63],

@@ -32,11 +32,13 @@ class FeatureSpec:
 def build_feature_spec(
     universe_config: UniverseConfig,
     feature_config: FeaturesConfig,
-    benchmark_ticker: str = "SPY",
+    benchmark_ticker: str | None = None,
 ) -> FeatureSpec:
     """Build the v1 feature specification from typed configs."""
     asset_order = universe_config.tickers
-    benchmark = _normalize_benchmark(benchmark_ticker)
+    benchmark = _normalize_benchmark(
+        benchmark_ticker or feature_config.market.benchmark_ticker
+    )
     per_asset_features = _per_asset_features(feature_config, benchmark)
     global_features = _global_features(feature_config, benchmark)
     current_weight_features = [

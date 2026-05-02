@@ -14,6 +14,7 @@ import pandas as pd
 REQUIRED_ARTIFACTS = (
     Path("data/raw/prices_daily.parquet"),
     Path("data/raw/macro_daily.parquet"),
+    Path("data/interim/aligned_feature_panel_daily.parquet"),
     Path("data/processed/model_matrix_daily.parquet"),
     Path("data/duckdb/portfolio.duckdb"),
     Path("artifacts/scalers/feature_scaler_v1.pkl"),
@@ -23,6 +24,7 @@ REQUIRED_ARTIFACTS = (
 REQUIRED_DUCKDB_TABLES = {
     "prices_daily",
     "macro_daily",
+    "aligned_feature_panel_daily",
     "features_daily",
     "global_features_daily",
     "features_normalized_daily",

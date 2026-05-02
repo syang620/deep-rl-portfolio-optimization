@@ -35,6 +35,9 @@ def test_valid_repo_configs_load_successfully() -> None:
         "BAMLC0A0CM",
     ]
     assert features.feature_version == "v1"
+    assert features.market.benchmark_ticker == "SPY"
+    assert features.market.credit_proxy_safe_ticker == "IEF"
+    assert features.market.credit_proxy_risk_ticker == "HYG"
     assert env.max_episode_steps == 52
 
 
@@ -82,6 +85,10 @@ def test_unknown_fields_fail_fast(tmp_path: Path) -> None:
     config_path.write_text(
         """
 feature_version: v1
+market:
+  benchmark_ticker: SPY
+  credit_proxy_safe_ticker: IEF
+  credit_proxy_risk_ticker: HYG
 return_windows: [1]
 volatility_windows: [21]
 drawdown_windows: [63]

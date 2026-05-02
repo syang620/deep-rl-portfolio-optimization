@@ -56,7 +56,12 @@ def test_build_feature_artifacts_writes_processed_parquet_and_duckdb(
     normalized_global_features = read_parquet(
         result.normalized_global_features_parquet_path
     )
+    interim_aligned_panel = read_parquet(result.interim_aligned_panel_parquet_path)
     model_matrix = read_parquet(result.model_matrix_parquet_path)
+    interim_aligned_panel_table = read_duckdb_table(
+        result.duckdb_path,
+        "aligned_feature_panel_daily",
+    )
     features_table = read_duckdb_table(result.duckdb_path, "features_daily")
     global_features_table = read_duckdb_table(
         result.duckdb_path,
@@ -87,6 +92,9 @@ def test_build_feature_artifacts_writes_processed_parquet_and_duckdb(
     assert result.normalized_global_features_parquet_path == (
         tmp_path / "processed" / "global_features_normalized_daily.parquet"
     )
+    assert result.interim_aligned_panel_parquet_path == (
+        tmp_path / "interim" / "aligned_feature_panel_daily.parquet"
+    )
     assert result.model_matrix_parquet_path == (
         tmp_path / "processed" / "model_matrix_daily.parquet"
     )
@@ -101,13 +109,21 @@ def test_build_feature_artifacts_writes_processed_parquet_and_duckdb(
     assert result.normalized_global_features_row_count == len(
         normalized_global_features
     )
+    assert result.interim_aligned_panel_row_count == len(interim_aligned_panel)
     assert result.model_matrix_row_count == len(model_matrix)
+    assert len(interim_aligned_panel_table) == len(interim_aligned_panel)
     assert len(features_table) == len(features)
     assert len(global_features_table) == len(global_features)
     assert len(normalized_features_table) == len(normalized_features)
     assert len(normalized_global_features_table) == len(normalized_global_features)
     assert len(model_matrix_table) == len(model_matrix)
     assert set(features["date"]) == set(global_features["date"])
+    assert {"ret_252d", "vix_z_21d", "spy_drawdown_63d"}.issubset(
+        interim_aligned_panel.columns
+    )
+    assert "split" not in interim_aligned_panel.columns
+    assert set(interim_aligned_panel["date"]) == set(features["date"])
+    assert set(interim_aligned_panel["ticker"]) == set(universe_config.tickers)
     assert pd.to_datetime(features["date"]).dt.date.min() >= data_config.model_start_date
     assert pd.to_datetime(global_features["date"]).dt.date.min() >= (
         data_config.model_start_date
@@ -126,6 +142,7 @@ def test_build_feature_artifacts_writes_processed_parquet_and_duckdb(
     assert "spy_drawdown_63d" in global_features.columns
     assert not features.drop(columns=["date", "ticker", "feature_version"]).isna().any().any()
     assert not global_features.drop(columns=["date", "feature_version"]).isna().any().any()
+    assert not interim_aligned_panel.drop(columns=["date", "ticker", "feature_version"]).isna().any().any()
     assert not normalized_features.drop(columns=["date", "ticker", "feature_version"]).isna().any().any()
     assert not normalized_global_features.drop(columns=["date", "feature_version"]).isna().any().any()
     assert isinstance(scaler_artifact, NormalizationArtifactBundle)
@@ -248,6 +265,11 @@ def _feature_config() -> FeaturesConfig:
     return FeaturesConfig.model_validate(
         {
             "feature_version": "v1",
+            "market": {
+                "benchmark_ticker": "SPY",
+                "credit_proxy_safe_ticker": "IEF",
+                "credit_proxy_risk_ticker": "HYG",
+            },
             "return_windows": [1, 5, 21, 63, 126, 252],
             "volatility_windows": [21, 63],
             "drawdown_windows": [63],

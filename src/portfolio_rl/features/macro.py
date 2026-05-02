@@ -17,8 +17,6 @@ DGS2_SERIES_ID = "DGS2"
 DGS10_SERIES_ID = "DGS10"
 YIELD_CURVE_SERIES_ID = "T10Y2Y"
 CREDIT_SPREAD_SERIES_IDS = ("BAMLH0A0HYM2", "BAMLC0A0CM")
-CREDIT_PROXY_SAFE_TICKER = "IEF"
-CREDIT_PROXY_RISK_TICKER = "HYG"
 CREDIT_SPREAD_Z_WINDOW = 63
 RATE_CHANGE_WINDOW = 5
 
@@ -36,7 +34,7 @@ def calculate_global_features(
 
     _add_vix_features(features, macro_wide, feature_config.volatility_windows)
     _add_rate_features(features, macro_wide)
-    _add_credit_spread_features(features, macro_wide, prices)
+    _add_credit_spread_features(features, macro_wide, prices, feature_config)
     _add_benchmark_regime_features(
         features,
         prices,
@@ -103,10 +101,15 @@ def _add_credit_spread_features(
     features: pd.DataFrame,
     macro_wide: pd.DataFrame,
     prices: pd.DataFrame,
+    feature_config: FeaturesConfig,
 ) -> None:
     spread = _select_full_history_credit_spread(macro_wide)
     if spread is None:
-        spread = _credit_spread_proxy_from_prices(prices)
+        spread = _credit_spread_proxy_from_prices(
+            prices,
+            feature_config.market.credit_proxy_safe_ticker,
+            feature_config.market.credit_proxy_risk_ticker,
+        )
     features["credit_spread_z_63d"] = _rolling_z_score(spread, CREDIT_SPREAD_Z_WINDOW)
 
 
@@ -129,7 +132,11 @@ def _select_full_history_credit_spread(macro_wide: pd.DataFrame) -> pd.Series | 
     return spread
 
 
-def _credit_spread_proxy_from_prices(prices: pd.DataFrame) -> pd.Series:
+def _credit_spread_proxy_from_prices(
+    prices: pd.DataFrame,
+    safe_ticker: str,
+    risk_ticker: str,
+) -> pd.Series:
     missing = [column for column in REQUIRED_PRICE_COLUMNS if column not in prices.columns]
     if missing:
         raise ValueError(f"prices is missing required columns: {missing}")
@@ -146,14 +153,14 @@ def _credit_spread_proxy_from_prices(prices: pd.DataFrame) -> pd.Series:
 
     missing_tickers = [
         ticker
-        for ticker in (CREDIT_PROXY_SAFE_TICKER, CREDIT_PROXY_RISK_TICKER)
+        for ticker in (safe_ticker, risk_ticker)
         if ticker not in price_wide.columns
     ]
     if missing_tickers:
         raise ValueError(f"prices is missing credit proxy tickers: {missing_tickers}")
 
     relative_credit_stress = (
-        price_wide[CREDIT_PROXY_SAFE_TICKER] / price_wide[CREDIT_PROXY_RISK_TICKER]
+        price_wide[safe_ticker] / price_wide[risk_ticker]
     )
     return relative_credit_stress.map(lambda value: log(value) if pd.notna(value) else nan)
 

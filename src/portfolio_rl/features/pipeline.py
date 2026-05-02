@@ -47,6 +47,7 @@ class FeatureArtifactResult:
     global_features_parquet_path: Path
     normalized_features_parquet_path: Path
     normalized_global_features_parquet_path: Path
+    interim_aligned_panel_parquet_path: Path
     model_matrix_parquet_path: Path
     scaler_artifact_path: Path
     feature_spec_path: Path
@@ -56,6 +57,7 @@ class FeatureArtifactResult:
     global_features_row_count: int
     normalized_features_row_count: int
     normalized_global_features_row_count: int
+    interim_aligned_panel_row_count: int
     model_matrix_row_count: int
 
 
@@ -63,12 +65,12 @@ def build_feature_artifacts(
     data_config: DataConfig,
     feature_config: FeaturesConfig,
     universe_config: UniverseConfig,
-    benchmark_ticker: str = "SPY",
     scaler_artifact_path: str | Path = DEFAULT_ARTIFACT_PATH,
     feature_spec_path: str | Path = DEFAULT_FEATURE_SPEC_PATH,
     data_quality_report_path: str | Path = DEFAULT_DATA_QUALITY_REPORT_PATH,
 ) -> FeatureArtifactResult:
     """Build and persist raw and normalized Phase 1 feature artifacts."""
+    benchmark_ticker = feature_config.market.benchmark_ticker
     prices = read_parquet(data_config.storage.raw_parquet_dir / "prices_daily.parquet")
     macro = read_parquet(data_config.storage.raw_parquet_dir / "macro_daily.parquet")
     feature_frames = build_features(
@@ -77,6 +79,10 @@ def build_feature_artifacts(
         feature_config=feature_config,
         benchmark_ticker=benchmark_ticker,
         asset_order=universe_config.tickers,
+    )
+    interim_aligned_panel = _build_interim_aligned_panel(
+        feature_frames.asset_features,
+        feature_frames.global_features,
     )
     asset_features = _prepare_model_period_features(
         feature_frames.asset_features,
@@ -141,9 +147,13 @@ def build_feature_artifacts(
         data_config.storage.processed_parquet_dir
         / "global_features_normalized_daily.parquet"
     )
+    interim_aligned_panel_path = (
+        data_config.storage.interim_parquet_dir / "aligned_feature_panel_daily.parquet"
+    )
     model_matrix_path = (
         data_config.storage.processed_parquet_dir / "model_matrix_daily.parquet"
     )
+    write_parquet(interim_aligned_panel, interim_aligned_panel_path)
     write_parquet(asset_features, features_path)
     write_parquet(global_features, global_features_path)
     write_parquet(normalized_asset_features, normalized_features_path)
@@ -151,6 +161,11 @@ def build_feature_artifacts(
     write_parquet(model_matrix, model_matrix_path)
 
     duckdb_path = data_config.storage.duckdb_path
+    write_duckdb_table(
+        interim_aligned_panel,
+        duckdb_path,
+        "aligned_feature_panel_daily",
+    )
     write_duckdb_table(asset_features, duckdb_path, "features_daily")
     write_duckdb_table(
         global_features,
@@ -174,6 +189,7 @@ def build_feature_artifacts(
         global_features_parquet_path=global_features_path,
         normalized_features_parquet_path=normalized_features_path,
         normalized_global_features_parquet_path=normalized_global_features_path,
+        interim_aligned_panel_parquet_path=interim_aligned_panel_path,
         model_matrix_parquet_path=model_matrix_path,
         scaler_artifact_path=Path(scaler_artifact_path),
         feature_spec_path=Path(feature_spec_path),
@@ -183,8 +199,25 @@ def build_feature_artifacts(
         global_features_row_count=len(global_features),
         normalized_features_row_count=len(normalized_asset_features),
         normalized_global_features_row_count=len(normalized_global_features),
+        interim_aligned_panel_row_count=len(interim_aligned_panel),
         model_matrix_row_count=len(model_matrix),
     )
+
+
+def _build_interim_aligned_panel(
+    asset_features: pd.DataFrame,
+    global_features: pd.DataFrame,
+) -> pd.DataFrame:
+    """Join aligned asset and global features before split labels and normalization."""
+    global_columns = [
+        column for column in global_features.columns if column != "feature_version"
+    ]
+    return asset_features.merge(
+        global_features.loc[:, global_columns],
+        on="date",
+        how="inner",
+        validate="many_to_one",
+    ).sort_values(["date", "ticker"], ignore_index=True)
 
 
 def _prepare_model_period_features(

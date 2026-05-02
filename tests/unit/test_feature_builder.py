@@ -215,6 +215,11 @@ def _feature_config() -> FeaturesConfig:
     return FeaturesConfig.model_validate(
         {
             "feature_version": "v1",
+            "market": {
+                "benchmark_ticker": "SPY",
+                "credit_proxy_safe_ticker": "IEF",
+                "credit_proxy_risk_ticker": "HYG",
+            },
             "return_windows": [1, 5, 21, 63, 126, 252],
             "volatility_windows": [21, 63],
             "drawdown_windows": [63],

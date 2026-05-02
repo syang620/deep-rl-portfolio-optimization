@@ -51,6 +51,9 @@ def main(argv: list[str] | None = None) -> None:
                 "normalized_global_features_parquet_path": str(
                     result.normalized_global_features_parquet_path
                 ),
+                "interim_aligned_panel_parquet_path": str(
+                    result.interim_aligned_panel_parquet_path
+                ),
                 "model_matrix_parquet_path": str(result.model_matrix_parquet_path),
                 "scaler_artifact_path": str(result.scaler_artifact_path),
                 "feature_spec_path": str(result.feature_spec_path),
@@ -63,6 +66,9 @@ def main(argv: list[str] | None = None) -> None:
                 ),
                 "normalized_global_features_row_count": (
                     result.normalized_global_features_row_count
+                ),
+                "interim_aligned_panel_row_count": (
+                    result.interim_aligned_panel_row_count
                 ),
                 "model_matrix_row_count": result.model_matrix_row_count,
             },

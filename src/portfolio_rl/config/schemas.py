@@ -138,8 +138,27 @@ class NormalizationConfig(StrictConfigModel):
         return value
 
 
+class MarketFeatureConfig(StrictConfigModel):
+    benchmark_ticker: str
+    credit_proxy_safe_ticker: str
+    credit_proxy_risk_ticker: str
+
+    @field_validator(
+        "benchmark_ticker",
+        "credit_proxy_safe_ticker",
+        "credit_proxy_risk_ticker",
+    )
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        ticker = value.strip().upper()
+        if not ticker:
+            raise ValueError("feature market tickers must not be empty")
+        return ticker
+
+
 class FeaturesConfig(StrictConfigModel):
     feature_version: str
+    market: MarketFeatureConfig
     return_windows: list[int] = Field(min_length=1)
     volatility_windows: list[int] = Field(min_length=1)
     drawdown_windows: list[int] = Field(min_length=1)
