@@ -8,6 +8,7 @@ import pytest
 
 from portfolio_rl.config.schemas import FeaturesConfig
 from portfolio_rl.features.builder import build_asset_features, build_features
+from portfolio_rl.features.macro import calculate_global_features
 from portfolio_rl.features.returns import calculate_return_features
 
 
@@ -117,6 +118,28 @@ def test_build_features_outputs_clean_asset_and_global_frames() -> None:
     }.issubset(result.global_features.columns)
 
 
+def test_global_features_use_price_credit_proxy_when_fred_starts_late() -> None:
+    macro = _macro_fixture(periods=110)
+    credit_dates = set(pd.bdate_range("2023-01-02", periods=110)[90:].date)
+    macro = macro.loc[
+        (macro["series_id"] != "BAMLH0A0HYM2") | macro["date"].isin(credit_dates)
+    ]
+
+    features = calculate_global_features(
+        macro,
+        _credit_proxy_prices_fixture(periods=110),
+        _feature_config(),
+        benchmark_ticker="SPY",
+    )
+
+    first_fred_credit_date = pd.Timestamp(min(credit_dates))
+    pre_fred_credit_z = features.loc[
+        features["date"] < first_fred_credit_date,
+        "credit_spread_z_63d",
+    ]
+    assert not pre_fred_credit_z.dropna().empty
+
+
 def test_build_asset_features_fails_when_benchmark_is_missing() -> None:
     prices = _prices_fixture()
 
@@ -153,6 +176,27 @@ def test_build_asset_features_fails_on_incomplete_post_warmup_coverage() -> None
             benchmark_ticker="SPY",
             asset_order=ASSET_ORDER,
         )
+
+
+def test_build_asset_features_drops_initial_incomplete_warmup_dates() -> None:
+    prices = _prices_fixture()
+    early_qqq_indexes = prices.loc[prices["ticker"] == "QQQ"].index[:10]
+    prices = prices.drop(index=early_qqq_indexes)
+
+    features = build_asset_features(
+        prices,
+        _feature_config(),
+        benchmark_ticker="SPY",
+        asset_order=ASSET_ORDER,
+    )
+
+    assert not features.empty
+    assert (
+        features.groupby("date")["ticker"]
+        .apply(list)
+        .map(lambda tickers: tickers == ASSET_ORDER)
+        .all()
+    )
 
 
 def test_build_features_aligns_asset_and_global_common_dates() -> None:
@@ -239,6 +283,25 @@ def _macro_fixture(periods: int = 340) -> pd.DataFrame:
                     "value": base + sin(index / 7.0) * 0.2 + index * 0.001,
                     "source": "test",
                     "downloaded_at": downloaded_at,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _credit_proxy_prices_fixture(periods: int) -> pd.DataFrame:
+    dates = pd.bdate_range("2023-01-02", periods=periods)
+    rows = []
+    for ticker, base, phase in (
+        ("SPY", 100.0, 0.0),
+        ("HYG", 75.0, 1.2),
+        ("IEF", 95.0, 2.4),
+    ):
+        for index, date in enumerate(dates):
+            rows.append(
+                {
+                    "date": date.date(),
+                    "ticker": ticker,
+                    "adj_close": base + index * 0.1 + sin(index / 5.0 + phase),
                 }
             )
     return pd.DataFrame(rows)

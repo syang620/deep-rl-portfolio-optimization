@@ -1,4 +1,4 @@
-"""CLI entrypoint for Phase 1 unnormalized feature artifacts."""
+"""CLI entrypoint for Phase 1 feature artifacts."""
 
 from __future__ import annotations
 
@@ -45,9 +45,26 @@ def main(argv: list[str] | None = None) -> None:
                 "global_features_parquet_path": str(
                     result.global_features_parquet_path
                 ),
+                "normalized_features_parquet_path": str(
+                    result.normalized_features_parquet_path
+                ),
+                "normalized_global_features_parquet_path": str(
+                    result.normalized_global_features_parquet_path
+                ),
+                "model_matrix_parquet_path": str(result.model_matrix_parquet_path),
+                "scaler_artifact_path": str(result.scaler_artifact_path),
+                "feature_spec_path": str(result.feature_spec_path),
+                "data_quality_report_path": str(result.data_quality_report_path),
                 "duckdb_path": str(result.duckdb_path),
                 "features_row_count": result.features_row_count,
                 "global_features_row_count": result.global_features_row_count,
+                "normalized_features_row_count": (
+                    result.normalized_features_row_count
+                ),
+                "normalized_global_features_row_count": (
+                    result.normalized_global_features_row_count
+                ),
+                "model_matrix_row_count": result.model_matrix_row_count,
             },
             indent=2,
         )

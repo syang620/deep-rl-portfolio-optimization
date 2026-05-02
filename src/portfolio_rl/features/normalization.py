@@ -30,6 +30,14 @@ class NormalizationArtifact:
     scales: dict[str, float]
 
 
+@dataclass(frozen=True)
+class NormalizationArtifactBundle:
+    """Train-fitted normalization artifacts for Phase 1 feature frames."""
+
+    asset_features: NormalizationArtifact
+    global_features: NormalizationArtifact
+
+
 def normalize_features(
     features: pd.DataFrame,
     feature_config: FeaturesConfig,
@@ -115,7 +123,7 @@ def transform_features(
 
 
 def save_normalization_artifact(
-    artifact: NormalizationArtifact,
+    artifact: NormalizationArtifact | NormalizationArtifactBundle,
     artifact_path: str | Path,
 ) -> None:
     """Persist the train-fitted normalization artifact."""
@@ -125,11 +133,13 @@ def save_normalization_artifact(
         pickle.dump(artifact, artifact_file)
 
 
-def load_normalization_artifact(artifact_path: str | Path) -> NormalizationArtifact:
+def load_normalization_artifact(
+    artifact_path: str | Path,
+) -> NormalizationArtifact | NormalizationArtifactBundle:
     """Load a persisted normalization artifact."""
     with Path(artifact_path).open("rb") as artifact_file:
         artifact = pickle.load(artifact_file)
-    if not isinstance(artifact, NormalizationArtifact):
+    if not isinstance(artifact, NormalizationArtifact | NormalizationArtifactBundle):
         raise TypeError("normalization artifact has unexpected type")
     return artifact
 

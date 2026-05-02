@@ -77,6 +77,7 @@ def build_asset_features(
     _add_rank_features(features, feature_config)
     features.insert(2, "feature_version", feature_config.feature_version)
     cleaned = _drop_invalid_feature_rows(features, IDENTIFIER_COLUMNS)
+    cleaned = _drop_initial_incomplete_coverage_dates(cleaned, normalized_asset_order)
     _assert_complete_asset_coverage(cleaned, normalized_asset_order)
     return _sort_asset_features(cleaned, normalized_asset_order).reset_index(drop=True)
 
@@ -177,6 +178,24 @@ def _assert_complete_asset_coverage(
                 "asset features are missing complete ticker coverage "
                 f"for {date_value}: missing={missing}, extra={extra}"
             )
+
+
+def _drop_initial_incomplete_coverage_dates(
+    asset_features: pd.DataFrame,
+    asset_order: Sequence[str],
+) -> pd.DataFrame:
+    expected_set = set(asset_order)
+    complete_by_date = asset_features.groupby("date", sort=True)["ticker"].apply(
+        lambda tickers: set(tickers) == expected_set
+    )
+    complete_dates = complete_by_date.loc[complete_by_date].index
+    if complete_dates.empty:
+        raise ValueError("asset features never reach complete ticker coverage")
+
+    first_complete_date = complete_dates.min()
+    return asset_features.loc[
+        asset_features["date"] >= first_complete_date
+    ].reset_index(drop=True)
 
 
 def _align_common_feature_dates(

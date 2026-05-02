@@ -17,6 +17,9 @@ DGS2_SERIES_ID = "DGS2"
 DGS10_SERIES_ID = "DGS10"
 YIELD_CURVE_SERIES_ID = "T10Y2Y"
 CREDIT_SPREAD_SERIES_IDS = ("BAMLH0A0HYM2", "BAMLC0A0CM")
+CREDIT_PROXY_SAFE_TICKER = "IEF"
+CREDIT_PROXY_RISK_TICKER = "HYG"
+CREDIT_SPREAD_Z_WINDOW = 63
 RATE_CHANGE_WINDOW = 5
 
 
@@ -33,7 +36,7 @@ def calculate_global_features(
 
     _add_vix_features(features, macro_wide, feature_config.volatility_windows)
     _add_rate_features(features, macro_wide)
-    _add_credit_spread_features(features, macro_wide)
+    _add_credit_spread_features(features, macro_wide, prices)
     _add_benchmark_regime_features(
         features,
         prices,
@@ -99,7 +102,15 @@ def _add_rate_features(features: pd.DataFrame, macro_wide: pd.DataFrame) -> None
 def _add_credit_spread_features(
     features: pd.DataFrame,
     macro_wide: pd.DataFrame,
+    prices: pd.DataFrame,
 ) -> None:
+    spread = _select_full_history_credit_spread(macro_wide)
+    if spread is None:
+        spread = _credit_spread_proxy_from_prices(prices)
+    features["credit_spread_z_63d"] = _rolling_z_score(spread, CREDIT_SPREAD_Z_WINDOW)
+
+
+def _select_full_history_credit_spread(macro_wide: pd.DataFrame) -> pd.Series | None:
     spread_series_id = next(
         (
             series_id
@@ -109,8 +120,42 @@ def _add_credit_spread_features(
         None,
     )
     if spread_series_id is None:
-        raise ValueError("macro is missing a configured credit spread series")
-    features["credit_spread_z_63d"] = _rolling_z_score(macro_wide[spread_series_id], 63)
+        return None
+
+    spread = macro_wide[spread_series_id]
+    first_valid_date = spread.first_valid_index()
+    if first_valid_date is None or first_valid_date > macro_wide.index.min():
+        return None
+    return spread
+
+
+def _credit_spread_proxy_from_prices(prices: pd.DataFrame) -> pd.Series:
+    missing = [column for column in REQUIRED_PRICE_COLUMNS if column not in prices.columns]
+    if missing:
+        raise ValueError(f"prices is missing required columns: {missing}")
+
+    price_frame = prices.loc[:, REQUIRED_PRICE_COLUMNS].copy()
+    price_frame["date"] = pd.to_datetime(price_frame["date"])
+    price_frame["ticker"] = price_frame["ticker"].str.upper()
+    price_frame["adj_close"] = pd.to_numeric(price_frame["adj_close"])
+    price_wide = price_frame.pivot(
+        index="date",
+        columns="ticker",
+        values="adj_close",
+    ).sort_index()
+
+    missing_tickers = [
+        ticker
+        for ticker in (CREDIT_PROXY_SAFE_TICKER, CREDIT_PROXY_RISK_TICKER)
+        if ticker not in price_wide.columns
+    ]
+    if missing_tickers:
+        raise ValueError(f"prices is missing credit proxy tickers: {missing_tickers}")
+
+    relative_credit_stress = (
+        price_wide[CREDIT_PROXY_SAFE_TICKER] / price_wide[CREDIT_PROXY_RISK_TICKER]
+    )
+    return relative_credit_stress.map(lambda value: log(value) if pd.notna(value) else nan)
 
 
 def _add_benchmark_regime_features(
