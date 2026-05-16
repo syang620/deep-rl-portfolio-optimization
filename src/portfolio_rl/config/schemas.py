@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from math import isfinite
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -191,6 +192,38 @@ class EnvConfig(StrictConfigModel):
     action_temperature: float = Field(gt=0)
     initial_weights: str
     transaction_cost_bps: float = Field(ge=0)
+    reward_type: str = "log_growth"
+    reward_scale: float = Field(default=100.0, gt=0)
+    terminal_bad_gross_penalty: float = -100.0
+    record_arrays_in_info: bool = False
+
+    @field_validator("action_transform")
+    @classmethod
+    def require_softmax_action_transform(cls, value: str) -> str:
+        if value != "softmax":
+            raise ValueError("action_transform must be softmax")
+        return value
+
+    @field_validator("initial_weights")
+    @classmethod
+    def require_equal_weight_initial_weights(cls, value: str) -> str:
+        if value != "equal_weight":
+            raise ValueError("initial_weights must be equal_weight")
+        return value
+
+    @field_validator("reward_type")
+    @classmethod
+    def require_log_growth_reward(cls, value: str) -> str:
+        if value != "log_growth":
+            raise ValueError("reward_type must be log_growth")
+        return value
+
+    @field_validator("terminal_bad_gross_penalty")
+    @classmethod
+    def require_finite_terminal_penalty(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("terminal_bad_gross_penalty must be finite")
+        return value
 
     @model_validator(mode="after")
     def require_consistent_episode_steps(self) -> EnvConfig:
