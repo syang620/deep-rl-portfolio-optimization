@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -28,6 +30,17 @@ class BacktestResult:
     trades: pd.DataFrame
     costs: pd.DataFrame
     metrics: dict[str, float | None]
+
+
+BACKTEST_ARTIFACT_FILENAMES = {
+    "nav": "nav.parquet",
+    "weights_target": "weights_target.parquet",
+    "weights_drifted": "weights_drifted.parquet",
+    "trades": "trades.parquet",
+    "costs": "costs.parquet",
+    "metrics": "metrics.json",
+    "report": "report.md",
+}
 
 
 def run_weight_policy_backtest(
@@ -214,6 +227,41 @@ def run_weight_policy_backtest(
     )
 
 
+def write_backtest_artifacts(
+    result: BacktestResult,
+    output_dir: str | Path,
+) -> None:
+    """Write required Milestone 6 backtest artifacts to disk."""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    result.nav.to_parquet(output_path / BACKTEST_ARTIFACT_FILENAMES["nav"], index=False)
+    result.weights_target.to_parquet(
+        output_path / BACKTEST_ARTIFACT_FILENAMES["weights_target"],
+        index=False,
+    )
+    result.weights_drifted.to_parquet(
+        output_path / BACKTEST_ARTIFACT_FILENAMES["weights_drifted"],
+        index=False,
+    )
+    result.trades.to_parquet(
+        output_path / BACKTEST_ARTIFACT_FILENAMES["trades"],
+        index=False,
+    )
+    result.costs.to_parquet(
+        output_path / BACKTEST_ARTIFACT_FILENAMES["costs"],
+        index=False,
+    )
+    (output_path / BACKTEST_ARTIFACT_FILENAMES["metrics"]).write_text(
+        json.dumps(result.metrics, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    (output_path / BACKTEST_ARTIFACT_FILENAMES["report"]).write_text(
+        _build_backtest_report(result),
+        encoding="utf-8",
+    )
+
+
 def _build_observation(
     feature_store: PortfolioFeatureStore,
     relative_idx: int,
@@ -222,6 +270,46 @@ def _build_observation(
     return np.concatenate(
         [feature_store.get_market_features(relative_idx), current_weights],
     ).astype(np.float32)
+
+
+def _build_backtest_report(result: BacktestResult) -> str:
+    strategy = (
+        str(result.nav["strategy"].iloc[0])
+        if not result.nav.empty and "strategy" in result.nav
+        else "unknown"
+    )
+    final_nav = (
+        float(result.nav["nav"].iloc[-1])
+        if not result.nav.empty and "nav" in result.nav
+        else None
+    )
+    metric_labels = [
+        ("Final NAV", final_nav),
+        ("Total Return", result.metrics.get("total_return")),
+        ("CAGR", result.metrics.get("cagr")),
+        ("Sharpe Ratio", result.metrics.get("sharpe_ratio")),
+        ("Max Drawdown", result.metrics.get("max_drawdown")),
+        ("Average Weekly Turnover", result.metrics.get("average_weekly_turnover")),
+        ("Transaction Cost Drag", result.metrics.get("transaction_cost_drag")),
+    ]
+    lines = [
+        f"# Backtest Report: {strategy}",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+    ]
+    lines.extend(
+        f"| {label} | {_format_report_value(value)} |"
+        for label, value in metric_labels
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _format_report_value(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.6f}"
 
 
 def _equal_weight_vector(n_assets: int) -> np.ndarray:

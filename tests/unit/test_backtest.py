@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from math import log
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -8,7 +10,11 @@ import pytest
 
 from portfolio_rl.data.dataset import build_portfolio_dataset
 from portfolio_rl.data.feature_store import PortfolioFeatureStore
-from portfolio_rl.evaluation.backtest import run_weight_policy_backtest
+from portfolio_rl.evaluation.backtest import (
+    BACKTEST_ARTIFACT_FILENAMES,
+    run_weight_policy_backtest,
+    write_backtest_artifacts,
+)
 from portfolio_rl.features.feature_spec import FeatureSpec
 from portfolio_rl.policies.baseline_policies import (
     BuyAndHoldEqualWeightPolicy,
@@ -115,6 +121,105 @@ def test_equal_weight_backtest_matches_manual_two_asset_case() -> None:
         result.weights_drifted["drifted_weight"],
         [1.10 / 2.10, 1.00 / 2.10],
     )
+
+
+def test_write_backtest_artifacts_creates_required_files(tmp_path: Path) -> None:
+    result = run_weight_policy_backtest(
+        feature_store=_feature_store(),
+        policy=EqualWeightWeeklyPolicy(n_assets=2),
+        strategy="equal_weight",
+        transaction_cost_bps=0.0,
+        max_steps=2,
+    )
+
+    write_backtest_artifacts(result, tmp_path)
+
+    for filename in BACKTEST_ARTIFACT_FILENAMES.values():
+        assert (tmp_path / filename).exists()
+
+
+def test_write_backtest_artifacts_round_trips_parquet_outputs(
+    tmp_path: Path,
+) -> None:
+    result = run_weight_policy_backtest(
+        feature_store=_feature_store(),
+        policy=EqualWeightWeeklyPolicy(n_assets=2),
+        strategy="equal_weight",
+        transaction_cost_bps=0.0,
+        max_steps=1,
+    )
+
+    write_backtest_artifacts(result, tmp_path)
+
+    assert list(pd.read_parquet(tmp_path / "nav.parquet").columns) == [
+        "date",
+        "strategy",
+        "nav",
+        "daily_return",
+        "drawdown",
+    ]
+    assert list(pd.read_parquet(tmp_path / "weights_target.parquet").columns) == [
+        "date",
+        "strategy",
+        "ticker",
+        "target_weight",
+    ]
+    assert list(pd.read_parquet(tmp_path / "weights_drifted.parquet").columns) == [
+        "date",
+        "strategy",
+        "ticker",
+        "drifted_weight",
+    ]
+    assert list(pd.read_parquet(tmp_path / "trades.parquet").columns) == [
+        "date",
+        "strategy",
+        "ticker",
+        "pre_trade_weight",
+        "target_weight",
+        "trade_weight",
+    ]
+    assert list(pd.read_parquet(tmp_path / "costs.parquet").columns) == [
+        "date",
+        "strategy",
+        "turnover",
+        "transaction_cost_fraction",
+    ]
+
+
+def test_write_backtest_artifacts_writes_metrics_json(tmp_path: Path) -> None:
+    result = run_weight_policy_backtest(
+        feature_store=_feature_store(),
+        policy=EqualWeightWeeklyPolicy(n_assets=2),
+        strategy="equal_weight",
+        transaction_cost_bps=0.0,
+        max_steps=1,
+    )
+
+    write_backtest_artifacts(result, tmp_path)
+
+    metrics = json.loads((tmp_path / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics == result.metrics
+
+
+def test_write_backtest_artifacts_writes_markdown_report(tmp_path: Path) -> None:
+    result = run_weight_policy_backtest(
+        feature_store=_feature_store(),
+        policy=EqualWeightWeeklyPolicy(n_assets=2),
+        strategy="equal_weight",
+        transaction_cost_bps=0.0,
+        max_steps=1,
+    )
+
+    write_backtest_artifacts(result, tmp_path)
+
+    report = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "Backtest Report: equal_weight" in report
+    assert "Final NAV" in report
+    assert "Total Return" in report
+    assert "Sharpe Ratio" in report
+    assert "Max Drawdown" in report
+    assert "Average Weekly Turnover" in report
+    assert "Transaction Cost Drag" in report
 
 
 def _assert_grouped_weights_sum_to_one(frame: pd.DataFrame, column: str) -> None:
