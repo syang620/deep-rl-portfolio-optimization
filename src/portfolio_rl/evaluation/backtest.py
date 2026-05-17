@@ -52,6 +52,7 @@ def run_weight_policy_backtest(
     transaction_cost_bps: float = 10.0,
     initial_nav: float = 1.0,
     max_steps: int | None = None,
+    inverse_vol_lookback_trading_days: int = 21,
 ) -> BacktestResult:
     """Run a deterministic target-weight policy through portfolio mechanics."""
     if rebalance_frequency_trading_days <= 0:
@@ -62,6 +63,8 @@ def run_weight_policy_backtest(
         raise ValueError("initial_nav must be positive and finite")
     if max_steps is not None and max_steps <= 0:
         raise ValueError("max_steps must be positive when provided")
+    if inverse_vol_lookback_trading_days <= 0:
+        raise ValueError("inverse_vol_lookback_trading_days must be positive")
     if hasattr(policy, "reset"):
         policy.reset()
 
@@ -93,6 +96,11 @@ def run_weight_policy_backtest(
             "portfolio_value": portfolio_value,
             "current_weights": current_weights.copy(),
             "asset_order": feature_store.asset_order,
+            "trailing_log_returns": _get_available_trailing_log_returns(
+                feature_store,
+                current_idx,
+                inverse_vol_lookback_trading_days,
+            ),
         }
         target_weights = np.asarray(
             policy.target_weights(observation, policy_info),
@@ -270,6 +278,15 @@ def _build_observation(
     return np.concatenate(
         [feature_store.get_market_features(relative_idx), current_weights],
     ).astype(np.float32)
+
+
+def _get_available_trailing_log_returns(
+    feature_store: PortfolioFeatureStore,
+    relative_idx: int,
+    lookback: int,
+) -> np.ndarray:
+    available_lookback = min(lookback, relative_idx + 1)
+    return feature_store.get_trailing_log_returns(relative_idx, available_lookback)
 
 
 def _build_backtest_report(result: BacktestResult) -> str:

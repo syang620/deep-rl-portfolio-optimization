@@ -19,6 +19,7 @@ from portfolio_rl.features.feature_spec import FeatureSpec
 from portfolio_rl.policies.baseline_policies import (
     BuyAndHoldEqualWeightPolicy,
     EqualWeightWeeklyPolicy,
+    InverseVolatilityPolicy,
     SingleAssetPolicy,
 )
 
@@ -220,6 +221,23 @@ def test_write_backtest_artifacts_writes_markdown_report(tmp_path: Path) -> None
     assert "Max Drawdown" in report
     assert "Average Weekly Turnover" in report
     assert "Transaction Cost Drag" in report
+
+
+def test_inverse_volatility_policy_backtest_runs_with_finite_outputs() -> None:
+    result = run_weight_policy_backtest(
+        feature_store=_feature_store(),
+        policy=InverseVolatilityPolicy(n_assets=2),
+        strategy="inverse_vol",
+        transaction_cost_bps=0.0,
+        max_steps=2,
+        inverse_vol_lookback_trading_days=3,
+    )
+
+    assert not result.nav.empty
+    assert np.isfinite(result.nav["nav"]).all()
+    assert (result.nav["nav"] > 0.0).all()
+    _assert_grouped_weights_sum_to_one(result.weights_target, "target_weight")
+    assert result.metrics["total_return"] is not None
 
 
 def _assert_grouped_weights_sum_to_one(frame: pd.DataFrame, column: str) -> None:

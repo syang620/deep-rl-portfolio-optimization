@@ -85,6 +85,38 @@ class SingleAssetPolicy:
         return weights
 
 
+class InverseVolatilityPolicy:
+    """Allocate target weights proportional to inverse realized volatility."""
+
+    def __init__(self, n_assets: int, volatility_floor: float = 1e-8) -> None:
+        self._n_assets = _validate_n_assets(n_assets)
+        if not np.isfinite(volatility_floor) or volatility_floor <= 0.0:
+            raise ValueError("volatility_floor must be positive and finite")
+        self._volatility_floor = float(volatility_floor)
+
+    def target_weights(
+        self,
+        observation: np.ndarray,
+        info: Mapping[str, Any],
+    ) -> np.ndarray:
+        del observation
+        if "trailing_log_returns" not in info:
+            raise ValueError("info must include trailing_log_returns")
+        trailing_log_returns = np.asarray(
+            info["trailing_log_returns"],
+            dtype=np.float64,
+        )
+        _validate_trailing_log_returns(
+            trailing_log_returns,
+            self._n_assets,
+            "trailing_log_returns",
+        )
+        volatility = np.std(trailing_log_returns, axis=0, ddof=0)
+        inverse_volatility = 1.0 / np.maximum(volatility, self._volatility_floor)
+        weights = inverse_volatility / inverse_volatility.sum()
+        return weights.astype(np.float32)
+
+
 def _equal_weight_vector(n_assets: int) -> np.ndarray:
     return np.full(n_assets, 1.0 / n_assets, dtype=np.float32)
 
@@ -110,3 +142,18 @@ def _validate_weight_vector(
         raise ValueError(f"{name} values must be nonnegative")
     if not np.isclose(weights.sum(), 1.0):
         raise ValueError(f"{name} must sum to one")
+
+
+def _validate_trailing_log_returns(
+    values: np.ndarray,
+    n_assets: int,
+    name: str,
+) -> None:
+    if values.ndim != 2:
+        raise ValueError(f"{name} must be a two-dimensional array")
+    if values.shape[0] == 0:
+        raise ValueError(f"{name} must contain at least one row")
+    if values.shape[1] != n_assets:
+        raise ValueError(f"{name} asset dimension must match n_assets")
+    if not np.isfinite(values).all():
+        raise ValueError(f"{name} values must be finite")

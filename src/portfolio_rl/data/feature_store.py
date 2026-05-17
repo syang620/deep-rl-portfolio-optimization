@@ -84,6 +84,24 @@ class PortfolioFeatureStore:
             )
         return self._returns[start:end].copy()
 
+    def get_trailing_log_returns(
+        self,
+        relative_idx: int,
+        lookback: int,
+    ) -> np.ndarray:
+        """Return trailing rows ending at relative_idx, shape [lookback, n_assets]."""
+        self._validate_relative_idx(relative_idx)
+        if lookback <= 0:
+            raise ValueError("lookback must be positive")
+
+        start = relative_idx - lookback + 1
+        if start < 0:
+            raise IndexError(
+                "trailing return window exceeds split boundary: "
+                f"relative_idx={relative_idx}, lookback={lookback}"
+            )
+        return self._returns[start : relative_idx + 1].copy()
+
     def max_valid_start_index(self, episode_length_trading_days: int) -> int:
         """Return the last start index with a full future holding window."""
         if episode_length_trading_days <= 0:

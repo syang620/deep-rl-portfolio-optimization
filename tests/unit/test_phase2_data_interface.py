@@ -87,6 +87,29 @@ def test_feature_store_rejects_forward_returns_past_split_boundary() -> None:
         store.get_forward_log_returns(relative_idx=1, horizon=5)
 
 
+def test_feature_store_trailing_returns_end_at_current_row() -> None:
+    store = PortfolioFeatureStore(
+        build_portfolio_dataset(_model_matrix(), _feature_spec()),
+        split="train",
+    )
+
+    trailing = store.get_trailing_log_returns(relative_idx=2, lookback=3)
+
+    assert trailing.shape == (3, 2)
+    np.testing.assert_allclose(trailing[:, 0], [0.01, 0.02, 0.03])
+    np.testing.assert_allclose(trailing[:, 1], [0.11, 0.12, 0.13])
+
+
+def test_feature_store_rejects_trailing_returns_past_split_start() -> None:
+    store = PortfolioFeatureStore(
+        build_portfolio_dataset(_model_matrix(), _feature_spec()),
+        split="train",
+    )
+
+    with pytest.raises(IndexError, match="exceeds split boundary"):
+        store.get_trailing_log_returns(relative_idx=1, lookback=3)
+
+
 def test_feature_store_max_valid_start_index_requires_full_window() -> None:
     store = PortfolioFeatureStore(
         build_portfolio_dataset(_model_matrix(), _feature_spec()),
