@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from portfolio_rl.config.loader import load_env_config
@@ -50,6 +52,11 @@ def main(argv: list[str] | None = None) -> None:
         help="Directory where policy artifacts will be written.",
     )
     parser.add_argument(
+        "--confirm-final-test",
+        action="store_true",
+        help="Required when evaluating the final selected model on the test split.",
+    )
+    parser.add_argument(
         "--max-steps",
         type=int,
         default=None,
@@ -65,6 +72,7 @@ def main(argv: list[str] | None = None) -> None:
         strategy=args.strategy,
         output_dir=Path(args.output_dir),
         max_steps=args.max_steps,
+        confirm_final_test=args.confirm_final_test,
     )
     print(output_dir)
 
@@ -78,14 +86,22 @@ def run_policy_evaluation(
     strategy: str = "ppo",
     output_dir: str | Path = "artifacts/backtests/ppo_validation",
     max_steps: int | None = None,
+    confirm_final_test: bool = False,
 ) -> Path:
     """Evaluate a saved PPO model and write deterministic backtest artifacts."""
     root_path = Path(root)
+    split_name = split.strip()
+    if split_name == "test" and not confirm_final_test:
+        raise ValueError(
+            "test split evaluation requires confirm_final_test=True "
+            "or CLI flag --confirm-final-test"
+        )
     env_config = load_env_config(_resolve_path(root_path, env_config_path))
     dataset = load_portfolio_dataset(root_path)
-    feature_store = PortfolioFeatureStore(dataset, split=split)
+    feature_store = PortfolioFeatureStore(dataset, split=split_name)
+    resolved_model_path = _resolve_path(root_path, model_path)
     policy = load_sb3_weight_policy(
-        _resolve_path(root_path, model_path),
+        resolved_model_path,
         action_temperature=env_config.action_temperature,
     )
     result = run_weight_policy_backtest(
@@ -100,7 +116,35 @@ def run_policy_evaluation(
     if not output_path.is_absolute():
         output_path = root_path / output_path
     write_backtest_artifacts(result, output_path)
+    _write_evaluation_metadata(
+        output_path=output_path,
+        model_path=resolved_model_path,
+        split=split_name,
+        strategy=strategy,
+        confirm_final_test=confirm_final_test,
+    )
     return output_path
+
+
+def _write_evaluation_metadata(
+    *,
+    output_path: Path,
+    model_path: Path,
+    split: str,
+    strategy: str,
+    confirm_final_test: bool,
+) -> None:
+    metadata = {
+        "created_at": datetime.now(UTC).isoformat(),
+        "model_path": str(model_path),
+        "split": split,
+        "strategy": strategy,
+        "confirm_final_test": bool(confirm_final_test),
+    }
+    (output_path / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def _resolve_path(root: Path, path: str | Path) -> Path:

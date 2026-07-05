@@ -8,6 +8,8 @@ version-controlled.
 - `planning/phase_1.md` documents the Phase 1 data pipeline plan.
 - `planning/phase_2.md` documents the active Phase 2 environment, training, and
   evaluation blueprint.
+- `technical_overview.md` summarizes the project goal, architecture, data flow,
+  training loop, and evaluation design.
 
 Treat the Markdown phase files as the current implementation source of truth.
 
