@@ -1,0 +1,38 @@
+algorithm: PPO
+policy: MlpPolicy
+total_timesteps: 500000
+seed: 42
+
+ppo:
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  n_steps: 2080
+  batch_size: 260
+  n_epochs: 10
+  clip_range: 0.2
+  ent_coef: 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+
+network:
+  pi: [256, 256]
+  vf: [256, 256]
+
+evaluation:
+  eval_freq_timesteps: 25000
+  deterministic: true
+  metric_for_best_model: sharpe_ratio
+
+checkpoints:
+  save_freq_timesteps: 50000
+  output_dir: artifacts/experiments
+
+wandb:
+  enabled: false
+  project: rl-dynamic-portfolio-allocation
+  group: phase2-ppo
+  tags:
+    - ppo
+    - weekly-rebalance
+    - v1-features

@@ -11,6 +11,7 @@ from portfolio_rl.config.schemas import (
     DataConfig,
     EnvConfig,
     FeaturesConfig,
+    TrainPPOConfig,
     UniverseConfig,
 )
 
@@ -39,3 +40,7 @@ def load_features_config(path: str | Path) -> FeaturesConfig:
 
 def load_env_config(path: str | Path) -> EnvConfig:
     return EnvConfig.model_validate(load_yaml(path))
+
+
+def load_train_ppo_config(path: str | Path) -> TrainPPOConfig:
+    return TrainPPOConfig.model_validate(load_yaml(path))

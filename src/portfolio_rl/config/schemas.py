@@ -236,3 +236,99 @@ class EnvConfig(StrictConfigModel):
                 "episode_length_trading_days / rebalance_frequency_trading_days"
             )
         return self
+
+
+class PPOHyperparametersConfig(StrictConfigModel):
+    learning_rate: float = Field(gt=0)
+    gamma: float = Field(gt=0, le=1)
+    gae_lambda: float = Field(gt=0, le=1)
+    n_steps: int = Field(gt=0)
+    batch_size: int = Field(gt=0)
+    n_epochs: int = Field(gt=0)
+    clip_range: float = Field(gt=0, le=1)
+    ent_coef: float = Field(ge=0)
+    vf_coef: float = Field(ge=0)
+    max_grad_norm: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def require_rollout_alignment(self) -> PPOHyperparametersConfig:
+        if self.n_steps % self.batch_size != 0:
+            raise ValueError("n_steps must be divisible by batch_size")
+        if self.n_steps % 52 != 0:
+            raise ValueError("n_steps must be divisible by 52")
+        return self
+
+
+class NetworkConfig(StrictConfigModel):
+    pi: list[int] = Field(min_length=1)
+    vf: list[int] = Field(min_length=1)
+
+    @field_validator("pi", "vf")
+    @classmethod
+    def require_positive_layer_sizes(cls, values: list[int]) -> list[int]:
+        if any(value <= 0 for value in values):
+            raise ValueError("network layer sizes must be positive integers")
+        return values
+
+
+class EvaluationConfig(StrictConfigModel):
+    eval_freq_timesteps: int = Field(gt=0)
+    deterministic: bool
+    metric_for_best_model: str
+
+    @field_validator("metric_for_best_model")
+    @classmethod
+    def require_supported_best_model_metric(cls, value: str) -> str:
+        supported_metrics = {"sharpe_ratio", "final_nav", "total_return"}
+        if value not in supported_metrics:
+            raise ValueError(
+                "metric_for_best_model must be one of "
+                f"{sorted(supported_metrics)}"
+            )
+        return value
+
+
+class CheckpointConfig(StrictConfigModel):
+    save_freq_timesteps: int = Field(gt=0)
+    output_dir: Path
+
+
+class WandbConfig(StrictConfigModel):
+    enabled: bool
+    project: str
+    group: str
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("project", "group")
+    @classmethod
+    def require_non_empty_string(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("value must not be empty")
+        return normalized
+
+
+class TrainPPOConfig(StrictConfigModel):
+    algorithm: str
+    policy: str
+    total_timesteps: int = Field(gt=0)
+    seed: int = Field(ge=0)
+    ppo: PPOHyperparametersConfig
+    network: NetworkConfig
+    evaluation: EvaluationConfig
+    checkpoints: CheckpointConfig
+    wandb: WandbConfig
+
+    @field_validator("algorithm")
+    @classmethod
+    def require_ppo_algorithm(cls, value: str) -> str:
+        if value != "PPO":
+            raise ValueError("algorithm must be PPO")
+        return value
+
+    @field_validator("policy")
+    @classmethod
+    def require_mlp_policy(cls, value: str) -> str:
+        if value != "MlpPolicy":
+            raise ValueError("policy must be MlpPolicy")
+        return value
