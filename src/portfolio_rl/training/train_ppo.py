@@ -22,6 +22,7 @@ from portfolio_rl.env.episode_sampler import RandomWindowEpisodeSampler
 from portfolio_rl.env.portfolio_env import PortfolioEnv
 from portfolio_rl.evaluation.backtest import run_weight_policy_backtest
 from portfolio_rl.policies.sb3_policy import load_sb3_weight_policy
+from portfolio_rl.training.callbacks import ValidationCheckpointCallback
 
 
 DEFAULT_FEATURE_SPEC_PATH = Path("artifacts/feature_specs/feature_spec_v1.json")
@@ -58,6 +59,14 @@ def run_ppo_training(
     if total_timesteps <= 0:
         raise ValueError("total_timesteps must be positive")
 
+    experiment_dir = _resolve_experiment_dir(
+        root_path=root_path,
+        configured_output_dir=train_config.checkpoints.output_dir,
+        output_dir_override=output_dir_override,
+        run_id=run_id,
+    )
+    experiment_dir.mkdir(parents=True, exist_ok=True)
+
     dataset = load_portfolio_dataset(root_path)
     train_store = PortfolioFeatureStore(dataset, split="train")
     validation_store = PortfolioFeatureStore(dataset, split="validation")
@@ -93,15 +102,19 @@ def run_ppo_training(
         },
         verbose=0,
     )
-    model.learn(total_timesteps=total_timesteps)
-
-    experiment_dir = _resolve_experiment_dir(
-        root_path=root_path,
-        configured_output_dir=train_config.checkpoints.output_dir,
-        output_dir_override=output_dir_override,
-        run_id=run_id,
+    validation_callback = ValidationCheckpointCallback(
+        validation_store=validation_store,
+        action_temperature=env_config.action_temperature,
+        rebalance_frequency_trading_days=(
+            env_config.rebalance_frequency_trading_days
+        ),
+        transaction_cost_bps=env_config.transaction_cost_bps,
+        eval_freq_timesteps=train_config.evaluation.eval_freq_timesteps,
+        metric_for_best_model=train_config.evaluation.metric_for_best_model,
+        output_dir=experiment_dir,
     )
-    experiment_dir.mkdir(parents=True, exist_ok=True)
+    model.learn(total_timesteps=total_timesteps, callback=validation_callback)
+
     model_path = experiment_dir / "model.zip"
     model.save(model_path)
     vec_env.close()

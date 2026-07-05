@@ -44,6 +44,8 @@ def test_ppo_smoke_training_writes_experiment_artifacts(tmp_path: Path) -> None:
     assert model_path == experiment_dir / "model.zip"
     for artifact_name in [
         "model.zip",
+        "best_model.zip",
+        "best_metrics_validation.json",
         "config.yaml",
         "env.yaml",
         "train_ppo.yaml",
