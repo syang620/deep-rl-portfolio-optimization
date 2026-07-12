@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,8 @@ class ValidationCheckpointCallback(BaseCallback):
         eval_freq_timesteps: int,
         metric_for_best_model: str,
         output_dir: str | Path,
+        validation_metrics_callback: Callable[[int, dict[str, float | None]], None]
+        | None = None,
     ) -> None:
         super().__init__(verbose=0)
         if eval_freq_timesteps <= 0:
@@ -41,6 +44,7 @@ class ValidationCheckpointCallback(BaseCallback):
         self.best_score: float | None = None
         self.best_metrics: dict[str, float | None] | None = None
         self._last_eval_timestep = 0
+        self._validation_metrics_callback = validation_metrics_callback
 
     def _on_step(self) -> bool:
         if self.num_timesteps - self._last_eval_timestep >= self.eval_freq_timesteps:
@@ -68,6 +72,8 @@ class ValidationCheckpointCallback(BaseCallback):
             result.nav,
             self.metric_for_best_model,
         )
+        if self._validation_metrics_callback is not None:
+            self._validation_metrics_callback(self._last_eval_timestep, result.metrics)
         if is_metric_improvement(score, self.best_score):
             self.best_score = float(score)
             self.best_metrics = result.metrics

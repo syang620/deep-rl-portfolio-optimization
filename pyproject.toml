@@ -17,6 +17,7 @@ dependencies = [
     "requests>=2.31",
     "stable-baselines3>=2.3",
     "torch>=2.2",
+    "wandb>=0.16",
     "yfinance>=0.2",
 ]
 

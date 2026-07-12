@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -70,6 +72,13 @@ def run_ppo_training(
     dataset = load_portfolio_dataset(root_path)
     train_store = PortfolioFeatureStore(dataset, split="train")
     validation_store = PortfolioFeatureStore(dataset, split="validation")
+    wandb_module, wandb_run = _start_wandb_run(
+        train_config=train_config,
+        env_config=env_config,
+        total_timesteps=total_timesteps,
+        feature_version=dataset.feature_version,
+        run_id=experiment_dir.name,
+    )
 
     def make_env() -> PortfolioEnv:
         return PortfolioEnv(
@@ -80,44 +89,51 @@ def run_ppo_training(
         )
 
     vec_env = DummyVecEnv([make_env])
-    model = PPO(
-        policy=train_config.policy,
-        env=vec_env,
-        learning_rate=train_config.ppo.learning_rate,
-        gamma=train_config.ppo.gamma,
-        gae_lambda=train_config.ppo.gae_lambda,
-        n_steps=train_config.ppo.n_steps,
-        batch_size=train_config.ppo.batch_size,
-        n_epochs=train_config.ppo.n_epochs,
-        clip_range=train_config.ppo.clip_range,
-        ent_coef=train_config.ppo.ent_coef,
-        vf_coef=train_config.ppo.vf_coef,
-        max_grad_norm=train_config.ppo.max_grad_norm,
-        seed=train_config.seed,
-        policy_kwargs={
-            "net_arch": {
-                "pi": train_config.network.pi,
-                "vf": train_config.network.vf,
+    try:
+        model = PPO(
+            policy=train_config.policy,
+            env=vec_env,
+            learning_rate=train_config.ppo.learning_rate,
+            gamma=train_config.ppo.gamma,
+            gae_lambda=train_config.ppo.gae_lambda,
+            n_steps=train_config.ppo.n_steps,
+            batch_size=train_config.ppo.batch_size,
+            n_epochs=train_config.ppo.n_epochs,
+            clip_range=train_config.ppo.clip_range,
+            ent_coef=train_config.ppo.ent_coef,
+            vf_coef=train_config.ppo.vf_coef,
+            max_grad_norm=train_config.ppo.max_grad_norm,
+            seed=train_config.seed,
+            policy_kwargs={
+                "net_arch": {
+                    "pi": train_config.network.pi,
+                    "vf": train_config.network.vf,
+                },
             },
-        },
-        verbose=0,
-    )
-    validation_callback = ValidationCheckpointCallback(
-        validation_store=validation_store,
-        action_temperature=env_config.action_temperature,
-        rebalance_frequency_trading_days=(
-            env_config.rebalance_frequency_trading_days
-        ),
-        transaction_cost_bps=env_config.transaction_cost_bps,
-        eval_freq_timesteps=train_config.evaluation.eval_freq_timesteps,
-        metric_for_best_model=train_config.evaluation.metric_for_best_model,
-        output_dir=experiment_dir,
-    )
-    model.learn(total_timesteps=total_timesteps, callback=validation_callback)
+            verbose=0,
+        )
+        validation_callback = ValidationCheckpointCallback(
+            validation_store=validation_store,
+            action_temperature=env_config.action_temperature,
+            rebalance_frequency_trading_days=(
+                env_config.rebalance_frequency_trading_days
+            ),
+            transaction_cost_bps=env_config.transaction_cost_bps,
+            eval_freq_timesteps=train_config.evaluation.eval_freq_timesteps,
+            metric_for_best_model=train_config.evaluation.metric_for_best_model,
+            output_dir=experiment_dir,
+            validation_metrics_callback=(
+                (lambda step, metrics: _log_wandb_metrics(wandb_run, step, metrics))
+                if wandb_run is not None
+                else None
+            ),
+        )
+        model.learn(total_timesteps=total_timesteps, callback=validation_callback)
 
-    model_path = experiment_dir / "model.zip"
-    model.save(model_path)
-    vec_env.close()
+        model_path = experiment_dir / "model.zip"
+        model.save(model_path)
+    finally:
+        vec_env.close()
 
     validation_policy = load_sb3_weight_policy(
         model_path,
@@ -151,6 +167,10 @@ def run_ppo_training(
         feature_spec_path=resolved_feature_spec_path,
         data_quality_report_path=resolved_data_quality_report_path,
     )
+    if wandb_run is not None:
+        _log_wandb_metrics(wandb_run, total_timesteps, validation_result.metrics)
+        _log_wandb_artifacts(wandb_module, wandb_run, experiment_dir)
+        wandb_run.finish()
     return model_path
 
 
@@ -181,6 +201,83 @@ def _resolve_experiment_dir(
 
 def _default_run_id() -> str:
     return "ppo_" + datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+
+
+def _start_wandb_run(
+    *,
+    train_config,
+    env_config,
+    total_timesteps: int,
+    feature_version: str,
+    run_id: str,
+) -> tuple[Any | None, Any | None]:
+    if not train_config.wandb.enabled:
+        return None, None
+
+    try:
+        wandb_module = importlib.import_module("wandb")
+    except ImportError as exc:
+        raise RuntimeError(
+            "W&B tracking is enabled but wandb is not installed. "
+            "Install project dependencies or set wandb.enabled=false."
+        ) from exc
+
+    config = {
+        "algorithm": train_config.algorithm,
+        "policy": train_config.policy,
+        "seed": train_config.seed,
+        "total_timesteps": total_timesteps,
+        "feature_version": feature_version,
+        "env": env_config.model_dump(mode="json"),
+        "ppo": train_config.ppo.model_dump(mode="json"),
+        "network": train_config.network.model_dump(mode="json"),
+        "evaluation": train_config.evaluation.model_dump(mode="json"),
+    }
+    run = wandb_module.init(
+        project=train_config.wandb.project,
+        group=train_config.wandb.group,
+        tags=train_config.wandb.tags,
+        name=run_id,
+        config=config,
+    )
+    return wandb_module, run
+
+
+def _log_wandb_metrics(
+    wandb_run,
+    step: int,
+    metrics: dict[str, float | None],
+) -> None:
+    payload = {
+        f"validation/{key}": value
+        for key, value in metrics.items()
+        if value is not None
+    }
+    if payload:
+        wandb_run.log(payload, step=step)
+
+
+def _log_wandb_artifacts(wandb_module, wandb_run, experiment_dir: Path) -> None:
+    artifact = wandb_module.Artifact(
+        name=f"{experiment_dir.name}-artifacts",
+        type="model",
+    )
+    for relative_path in [
+        "model.zip",
+        "best_model.zip",
+        "manifest.json",
+        "config.yaml",
+        "env.yaml",
+        "train_ppo.yaml",
+        "feature_spec_v1.json",
+        "data_quality_report_v1.json",
+        "metrics_validation.json",
+        "best_metrics_validation.json",
+    ]:
+        path = experiment_dir / relative_path
+        if path.exists():
+            artifact.add_file(str(path), name=relative_path)
+    wandb_run.log_artifact(artifact)
 
 
 def _write_validation_artifacts(

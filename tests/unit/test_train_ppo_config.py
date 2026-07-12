@@ -28,6 +28,15 @@ def test_valid_train_ppo_config_loads_successfully() -> None:
     assert config.wandb.enabled is False
 
 
+def test_wandb_train_ppo_config_loads_successfully() -> None:
+    config = load_train_ppo_config(CONFIG_DIR / "train_ppo_wandb.yaml")
+
+    assert config.wandb.enabled is True
+    assert config.wandb.project == "rl-dynamic-portfolio-allocation"
+    assert config.wandb.group == "phase2-ppo"
+    assert "wandb" in config.wandb.tags
+
+
 def test_train_ppo_unknown_top_level_field_fails(tmp_path: Path) -> None:
     config_path = tmp_path / "train_ppo.yaml"
     config_path.write_text(

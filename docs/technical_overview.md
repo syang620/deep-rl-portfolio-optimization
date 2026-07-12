@@ -81,7 +81,7 @@ rebalance_frequency_trading_days: 5
 episode_length_trading_days: 260
 max_episode_steps: 52
 action_transform: softmax
-action_temperature: 1.0
+action_temperature: 0.5
 transaction_cost_bps: 10.0
 reward_type: log_growth
 reward_scale: 100.0
@@ -89,8 +89,8 @@ reward_scale: 100.0
 
 `action_temperature` controls how concentrated the softmax weights become.
 Higher values create sharper allocations and can increase turnover. The current
-default is `1.0` after validation diagnostics showed that `5.0` caused excessive
-turnover and transaction-cost drag.
+default is `0.5` after validation diagnostics showed that higher temperatures
+caused excessive turnover and transaction-cost drag.
 
 ## Training And Evaluation
 

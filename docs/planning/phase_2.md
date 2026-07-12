@@ -158,7 +158,7 @@ max_episode_steps: 52  # derived exactly as (episode_length_trading_days / rebal
 
 # --- Action & Frictions ---
 action_transform: softmax
-action_temperature: 5.0
+action_temperature: 0.5
 initial_weights: equal_weight
 transaction_cost_bps: 10.0
 
@@ -190,7 +190,7 @@ Convert raw action logits into target portfolio weights:
 target_weights = softmax(raw_action * action_temperature)
 ```
 
-With `action_temperature = 5.0`, the policy can express high-conviction allocations while still receiving normalized actions from the RL algorithm.
+The original Phase 2 design used `action_temperature = 5.0` to allow high-conviction allocations while still receiving normalized actions from the RL algorithm. Validation pilots showed excessive turnover and transaction-cost drag at higher temperatures, so the selected Phase 2 PPO candidate uses `action_temperature = 0.5`.
 
 ### 2.5 Current-weight observation contract
 
