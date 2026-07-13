@@ -11,6 +11,8 @@ from portfolio_rl.config.schemas import (
     DataConfig,
     EnvConfig,
     FeaturesConfig,
+    Phase3EvaluationConfig,
+    Phase3ExperimentConfig,
     TrainPPOConfig,
     UniverseConfig,
 )
@@ -44,3 +46,11 @@ def load_env_config(path: str | Path) -> EnvConfig:
 
 def load_train_ppo_config(path: str | Path) -> TrainPPOConfig:
     return TrainPPOConfig.model_validate(load_yaml(path))
+
+
+def load_phase3_evaluation_config(path: str | Path) -> Phase3EvaluationConfig:
+    return Phase3EvaluationConfig.model_validate(load_yaml(path))
+
+
+def load_phase3_experiment_config(path: str | Path) -> Phase3ExperimentConfig:
+    return Phase3ExperimentConfig.model_validate(load_yaml(path))

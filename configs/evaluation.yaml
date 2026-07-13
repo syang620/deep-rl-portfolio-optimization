@@ -1,0 +1,32 @@
+validation:
+  split: validation
+  output_root: artifacts/backtests
+  include_baselines: true
+  include_ppo: true
+  metric_for_selection: sharpe_ratio
+
+final_test:
+  split: test
+  require_confirm_final_test: true
+  output_root: artifacts/final_model
+
+robustness:
+  transaction_cost_bps: [0.0, 5.0, 10.0, 25.0, 50.0]
+  regime_windows:
+    - name: validation_2024
+      start_date: "2024-01-01"
+      end_date: "2024-12-31"
+    - name: rate_hike_2022
+      start_date: "2022-01-01"
+      end_date: "2022-12-31"
+    - name: covid_2020
+      start_date: "2020-02-01"
+      end_date: "2020-12-31"
+
+selection:
+  primary_metric: sharpe_ratio
+  higher_is_better: true
+  tie_breakers:
+    - max_drawdown
+    - average_weekly_turnover
+    - transaction_cost_drag

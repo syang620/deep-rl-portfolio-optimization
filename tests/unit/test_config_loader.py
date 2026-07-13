@@ -9,6 +9,8 @@ from portfolio_rl.config.loader import (
     load_data_config,
     load_env_config,
     load_features_config,
+    load_phase3_evaluation_config,
+    load_phase3_experiment_config,
     load_universe_config,
 )
 
@@ -39,6 +41,39 @@ def test_valid_repo_configs_load_successfully() -> None:
     assert features.market.credit_proxy_safe_ticker == "IEF"
     assert features.market.credit_proxy_risk_ticker == "HYG"
     assert env.max_episode_steps == 52
+
+
+def test_valid_phase3_evaluation_config_loads_successfully() -> None:
+    config = load_phase3_evaluation_config(CONFIG_DIR / "evaluation.yaml")
+
+    assert config.validation.split == "validation"
+    assert config.validation.metric_for_selection == "sharpe_ratio"
+    assert config.final_test.split == "test"
+    assert config.final_test.require_confirm_final_test is True
+    assert config.robustness.transaction_cost_bps == [0.0, 5.0, 10.0, 25.0, 50.0]
+    assert config.robustness.regime_windows[0].name == "validation_2024"
+    assert config.selection.primary_metric == "sharpe_ratio"
+    assert config.selection.tie_breakers == [
+        "max_drawdown",
+        "average_weekly_turnover",
+        "transaction_cost_drag",
+    ]
+
+
+def test_valid_phase3_experiment_configs_load_successfully() -> None:
+    config_paths = sorted((CONFIG_DIR / "experiments").glob("*.yaml"))
+    loaded = [load_phase3_experiment_config(path) for path in config_paths]
+
+    assert [config.experiment_name for config in loaded] == [
+        "ppo_phase3_default",
+        "ppo_phase3_seed_sweep",
+        "ppo_phase3_temperature_sweep",
+    ]
+    assert loaded[0].base_env_config == Path("configs/env.yaml")
+    assert loaded[0].seeds == [42]
+    assert loaded[0].overrides == {}
+    assert loaded[1].overrides["env.action_temperature"] == [0.5]
+    assert loaded[2].overrides["ppo.ent_coef"] == [0.005, 0.01]
 
 
 def test_duplicate_tickers_fail(tmp_path: Path) -> None:
@@ -109,6 +144,59 @@ normalization:
 
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         load_features_config(config_path)
+
+
+def test_phase3_evaluation_unknown_fields_fail_fast(tmp_path: Path) -> None:
+    config_path = tmp_path / "evaluation.yaml"
+    config_path.write_text(
+        """
+validation:
+  split: validation
+  output_root: artifacts/backtests
+  include_baselines: true
+  include_ppo: true
+  metric_for_selection: sharpe_ratio
+final_test:
+  split: test
+  require_confirm_final_test: true
+  output_root: artifacts/final_model
+robustness:
+  transaction_cost_bps: [10.0]
+  regime_windows:
+    - name: validation_2024
+      start_date: "2024-01-01"
+      end_date: "2024-12-31"
+selection:
+  primary_metric: sharpe_ratio
+  higher_is_better: true
+  tie_breakers: [max_drawdown]
+unexpected_key: true
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        load_phase3_evaluation_config(config_path)
+
+
+def test_phase3_experiment_override_values_must_be_lists(tmp_path: Path) -> None:
+    config_path = tmp_path / "experiment.yaml"
+    config_path.write_text(
+        """
+experiment_name: invalid_phase3_experiment
+base_data_config: configs/data.yaml
+base_env_config: configs/env.yaml
+base_train_config: configs/train_ppo.yaml
+run_id_prefix: invalid_phase3
+seeds: [42]
+overrides:
+  env.action_temperature: 0.5
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="override values must be lists"):
+        load_phase3_experiment_config(config_path)
 
 
 def test_overlapping_split_dates_fail(tmp_path: Path) -> None:

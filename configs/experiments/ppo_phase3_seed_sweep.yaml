@@ -1,0 +1,10 @@
+experiment_name: ppo_phase3_seed_sweep
+base_data_config: configs/data.yaml
+base_env_config: configs/env.yaml
+base_train_config: configs/train_ppo.yaml
+run_id_prefix: ppo_phase3_seed
+total_timesteps: 500000
+seeds: [7, 42, 101, 202, 999]
+overrides:
+  env.action_temperature: [0.5]
+  ppo.ent_coef: [0.01]

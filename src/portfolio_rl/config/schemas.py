@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from math import isfinite
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -332,3 +333,128 @@ class TrainPPOConfig(StrictConfigModel):
         if value != "MlpPolicy":
             raise ValueError("policy must be MlpPolicy")
         return value
+
+
+class Phase3ValidationConfig(StrictConfigModel):
+    split: str
+    output_root: Path
+    include_baselines: bool
+    include_ppo: bool
+    metric_for_selection: str
+
+    @field_validator("split")
+    @classmethod
+    def require_validation_split(cls, value: str) -> str:
+        if value != "validation":
+            raise ValueError("validation split must be validation")
+        return value
+
+
+class Phase3FinalTestConfig(StrictConfigModel):
+    split: str
+    require_confirm_final_test: bool
+    output_root: Path
+
+    @field_validator("split")
+    @classmethod
+    def require_test_split(cls, value: str) -> str:
+        if value != "test":
+            raise ValueError("final_test split must be test")
+        return value
+
+    @field_validator("require_confirm_final_test")
+    @classmethod
+    def require_final_test_confirmation(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("final_test must require confirmation")
+        return value
+
+
+class RegimeWindowConfig(StrictConfigModel):
+    name: str
+    start_date: date
+    end_date: date
+
+    @field_validator("name")
+    @classmethod
+    def require_non_empty_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("regime window name must not be empty")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_ordered_dates(self) -> RegimeWindowConfig:
+        if self.start_date > self.end_date:
+            raise ValueError("regime window start_date must be on or before end_date")
+        return self
+
+
+class RobustnessConfig(StrictConfigModel):
+    transaction_cost_bps: list[float] = Field(min_length=1)
+    regime_windows: list[RegimeWindowConfig] = Field(min_length=1)
+
+    @field_validator("transaction_cost_bps")
+    @classmethod
+    def require_nonnegative_costs(cls, values: list[float]) -> list[float]:
+        if any(value < 0.0 or not isfinite(value) for value in values):
+            raise ValueError("transaction_cost_bps values must be finite and nonnegative")
+        return values
+
+
+class SelectionConfig(StrictConfigModel):
+    primary_metric: str
+    higher_is_better: bool
+    tie_breakers: list[str] = Field(min_length=1)
+
+    @field_validator("primary_metric")
+    @classmethod
+    def require_primary_metric(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("primary_metric must not be empty")
+        return value
+
+
+class Phase3EvaluationConfig(StrictConfigModel):
+    validation: Phase3ValidationConfig
+    final_test: Phase3FinalTestConfig
+    robustness: RobustnessConfig
+    selection: SelectionConfig
+
+
+class Phase3ExperimentConfig(StrictConfigModel):
+    experiment_name: str
+    base_data_config: Path
+    base_env_config: Path
+    base_train_config: Path
+    run_id_prefix: str
+    seeds: list[int] = Field(min_length=1)
+    total_timesteps: int | None = Field(default=None, gt=0)
+    overrides: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("experiment_name", "run_id_prefix")
+    @classmethod
+    def require_non_empty_identifier(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("experiment identifiers must not be empty")
+        return normalized
+
+    @field_validator("seeds")
+    @classmethod
+    def require_nonnegative_seeds(cls, values: list[int]) -> list[int]:
+        if any(value < 0 for value in values):
+            raise ValueError("seeds must be nonnegative")
+        return values
+
+    @field_validator("overrides")
+    @classmethod
+    def require_list_override_values(cls, values: dict[str, Any]) -> dict[str, Any]:
+        for key, value in values.items():
+            if not key.strip():
+                raise ValueError("override keys must not be empty")
+            if not isinstance(value, list):
+                raise ValueError("override values must be lists")
+            if len(value) == 0:
+                raise ValueError("override value lists must not be empty")
+        return values

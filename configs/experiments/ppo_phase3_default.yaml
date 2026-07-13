@@ -1,0 +1,7 @@
+experiment_name: ppo_phase3_default
+base_data_config: configs/data.yaml
+base_env_config: configs/env.yaml
+base_train_config: configs/train_ppo.yaml
+run_id_prefix: ppo_phase3_default
+seeds: [42]
+overrides: {}
