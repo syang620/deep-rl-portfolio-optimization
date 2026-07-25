@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,8 @@ from portfolio_rl.config.loader import load_yaml
 
 REGISTRY_COLUMNS = [
     "run_id",
+    "experiment_name",
+    "matrix_status",
     "created_at",
     "git_commit",
     "feature_version",
@@ -35,16 +39,50 @@ REGISTRY_COLUMNS = [
     "model_path",
     "best_model_path",
     "manifest_path",
+    "artifact_complete",
+    "reproducible",
+    "metrics_complete",
+    "selection_eligible",
+    "eligibility_issues",
 ]
+
+REQUIRED_ARTIFACTS = [
+    "model.zip",
+    "metrics_validation.json",
+    "manifest.json",
+    "config.yaml",
+    "env.yaml",
+    "train_ppo.yaml",
+    "feature_spec_v1.json",
+    "validation_nav.parquet",
+    "validation_weights.parquet",
+    "validation_trades.parquet",
+    "validation_costs.parquet",
+]
+REQUIRED_METRICS = [
+    "total_return",
+    "sharpe_ratio",
+    "max_drawdown",
+    "average_weekly_turnover",
+    "transaction_cost_drag",
+]
+HASHED_ARTIFACTS = {
+    "data_config_hash": "config.yaml",
+    "env_config_hash": "env.yaml",
+    "train_config_hash": "train_ppo.yaml",
+    "feature_spec_hash": "feature_spec_v1.json",
+}
 
 
 def build_experiment_registry(
     experiment_root: str | Path = "artifacts/experiments",
+    matrix_root: str | Path | None = "artifacts/experiment_matrices",
 ) -> pd.DataFrame:
     """Build a tabular inventory from experiment artifact bundles."""
     root = Path(experiment_root)
+    matrix_records = _load_matrix_records(matrix_root)
     rows = [
-        _experiment_row(manifest_path)
+        _experiment_row(manifest_path, matrix_records)
         for manifest_path in sorted(root.glob("*/manifest.json"))
     ]
     return pd.DataFrame(rows, columns=REGISTRY_COLUMNS)
@@ -53,10 +91,11 @@ def build_experiment_registry(
 def write_experiment_registry(
     *,
     experiment_root: str | Path = "artifacts/experiments",
+    matrix_root: str | Path | None = "artifacts/experiment_matrices",
     output_prefix: str | Path = "artifacts/experiments/registry",
 ) -> dict[str, Path]:
     """Write registry CSV, Parquet, and Markdown artifacts."""
-    registry = build_experiment_registry(experiment_root)
+    registry = build_experiment_registry(experiment_root, matrix_root)
     prefix = Path(output_prefix)
     prefix.parent.mkdir(parents=True, exist_ok=True)
 
@@ -73,18 +112,47 @@ def write_experiment_registry(
     }
 
 
-def _experiment_row(manifest_path: Path) -> dict[str, Any]:
+def _experiment_row(
+    manifest_path: Path,
+    matrix_records: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     run_dir = manifest_path.parent
     manifest = _read_json(manifest_path)
-    env_config = _read_yaml_if_exists(run_dir / "env.yaml")
-    train_config = _read_yaml_if_exists(run_dir / "train_ppo.yaml")
-    metrics = _read_json_if_exists(run_dir / "metrics_validation.json")
-    best_metrics = _read_json_if_exists(run_dir / "best_metrics_validation.json")
+    run_id = str(manifest.get("run_id") or run_dir.name)
+    matrix_record = matrix_records.get(run_id)
+    env_config, env_issue = _read_yaml_artifact(run_dir / "env.yaml")
+    train_config, train_issue = _read_yaml_artifact(
+        run_dir / "train_ppo.yaml"
+    )
+    metrics, metrics_issue = _read_json_artifact(
+        run_dir / "metrics_validation.json"
+    )
+    best_metrics, _ = _read_json_artifact(
+        run_dir / "best_metrics_validation.json"
+    )
+    read_issues = [
+        issue
+        for issue in [env_issue, train_issue, metrics_issue]
+        if issue is not None
+    ]
+    eligibility = _eligibility(
+        run_dir,
+        manifest,
+        metrics,
+        matrix_record,
+        read_issues,
+    )
 
     ppo_config = _mapping(train_config.get("ppo"))
     evaluation_config = _mapping(train_config.get("evaluation"))
     row = {
-        "run_id": manifest.get("run_id") or run_dir.name,
+        "run_id": run_id,
+        "experiment_name": (
+            matrix_record.get("experiment_name") if matrix_record else None
+        ),
+        "matrix_status": (
+            matrix_record.get("status") if matrix_record else None
+        ),
         "created_at": manifest.get("created_at"),
         "git_commit": manifest.get("git_commit"),
         "feature_version": manifest.get("feature_version"),
@@ -109,8 +177,157 @@ def _experiment_row(manifest_path: Path) -> dict[str, Any]:
         "model_path": _path_if_exists(run_dir / "model.zip"),
         "best_model_path": _path_if_exists(run_dir / "best_model.zip"),
         "manifest_path": str(manifest_path),
+        **eligibility,
     }
     return row
+
+
+def _load_matrix_records(
+    matrix_root: str | Path | None,
+) -> dict[str, dict[str, Any]]:
+    if matrix_root is None:
+        return {}
+    root = Path(matrix_root)
+    records: dict[str, dict[str, Any]] = {}
+    for manifest_path in sorted(
+        root.glob("*/experiment_matrix_manifest.json")
+    ):
+        manifest = _read_json(manifest_path)
+        experiment_name = manifest.get("experiment_name")
+        runs = manifest.get("runs")
+        if not isinstance(experiment_name, str) or not experiment_name:
+            raise ValueError(
+                f"matrix manifest has no experiment_name: {manifest_path}"
+            )
+        if not isinstance(runs, list):
+            raise ValueError(
+                f"matrix manifest runs must be a list: {manifest_path}"
+            )
+        for run in runs:
+            if not isinstance(run, dict) or not isinstance(
+                run.get("run_id"), str
+            ):
+                raise ValueError(
+                    f"matrix manifest contains an invalid run: {manifest_path}"
+                )
+            run_id = run["run_id"]
+            if run_id in records:
+                raise ValueError(
+                    "run id appears in multiple matrix manifests: "
+                    f"{run_id}"
+                )
+            records[run_id] = {
+                "experiment_name": experiment_name,
+                "status": run.get("status"),
+                "git_commit": manifest.get("git_commit"),
+            }
+    return records
+
+
+def _eligibility(
+    run_dir: Path,
+    manifest: dict[str, Any],
+    metrics: dict[str, Any],
+    matrix_record: dict[str, Any] | None,
+    read_issues: list[str],
+) -> dict[str, Any]:
+    issues = list(read_issues)
+    missing_artifacts = [
+        name for name in REQUIRED_ARTIFACTS if not (run_dir / name).is_file()
+    ]
+    issues.extend(f"missing_artifact:{name}" for name in missing_artifacts)
+    artifact_complete = not missing_artifacts
+
+    run_commit = manifest.get("git_commit")
+    if not isinstance(run_commit, str) or not run_commit:
+        issues.append("missing_git_commit")
+    if matrix_record is None:
+        issues.append("missing_matrix_provenance")
+        matrix_commit = None
+    else:
+        matrix_commit = matrix_record.get("git_commit")
+        if matrix_record.get("status") != "completed":
+            issues.append(
+                f"matrix_status:{matrix_record.get('status') or 'missing'}"
+            )
+        if not isinstance(matrix_commit, str) or not matrix_commit:
+            issues.append("missing_matrix_git_commit")
+        elif run_commit != matrix_commit:
+            issues.append("git_commit_mismatch")
+
+    hash_issues = _artifact_hash_issues(run_dir, manifest)
+    issues.extend(hash_issues)
+    reproducible = (
+        artifact_complete
+        and matrix_record is not None
+        and isinstance(run_commit, str)
+        and bool(run_commit)
+        and run_commit == matrix_commit
+        and not hash_issues
+    )
+
+    invalid_metrics = [
+        name
+        for name in REQUIRED_METRICS
+        if not _is_finite_number(metrics.get(name))
+    ]
+    issues.extend(f"invalid_metric:{name}" for name in invalid_metrics)
+    metrics_complete = not invalid_metrics
+    issues.extend(_validation_nav_issues(run_dir / "validation_nav.parquet"))
+
+    return {
+        "artifact_complete": artifact_complete,
+        "reproducible": reproducible,
+        "metrics_complete": metrics_complete,
+        "selection_eligible": not issues,
+        "eligibility_issues": ";".join(issues),
+    }
+
+
+def _artifact_hash_issues(
+    run_dir: Path,
+    manifest: dict[str, Any],
+) -> list[str]:
+    issues = []
+    for manifest_key, filename in HASHED_ARTIFACTS.items():
+        path = run_dir / filename
+        expected_hash = manifest.get(manifest_key)
+        if not isinstance(expected_hash, str) or not expected_hash:
+            issues.append(f"missing_manifest_hash:{manifest_key}")
+        elif path.is_file() and _sha256_file(path) != expected_hash:
+            issues.append(f"hash_mismatch:{filename}")
+    return issues
+
+
+def _validation_nav_issues(path: Path) -> list[str]:
+    if not path.is_file():
+        return []
+    try:
+        nav = pd.read_parquet(path)
+    except Exception:
+        return ["unreadable_artifact:validation_nav.parquet"]
+    if "nav" not in nav.columns or nav.empty:
+        return ["invalid_validation_nav"]
+    values = pd.to_numeric(nav["nav"], errors="coerce")
+    if not values.map(_is_finite_number).all() or (values <= 0.0).any():
+        return ["invalid_validation_nav"]
+    return []
+
+
+def _is_finite_number(value: Any) -> bool:
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and isfinite(float(value))
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file_obj:
+        for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -120,16 +337,22 @@ def _read_json(path: Path) -> dict[str, Any]:
     return loaded
 
 
-def _read_json_if_exists(path: Path) -> dict[str, Any]:
+def _read_json_artifact(path: Path) -> tuple[dict[str, Any], str | None]:
     if not path.exists():
-        return {}
-    return _read_json(path)
+        return {}, None
+    try:
+        return _read_json(path), None
+    except Exception:
+        return {}, f"unreadable_artifact:{path.name}"
 
 
-def _read_yaml_if_exists(path: Path) -> dict[str, Any]:
+def _read_yaml_artifact(path: Path) -> tuple[dict[str, Any], str | None]:
     if not path.exists():
-        return {}
-    return load_yaml(path)
+        return {}, None
+    try:
+        return load_yaml(path), None
+    except Exception:
+        return {}, f"unreadable_artifact:{path.name}"
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -141,10 +364,15 @@ def _path_if_exists(path: Path) -> str | None:
 
 
 def _registry_markdown(registry: pd.DataFrame) -> str:
+    eligible_count = (
+        int(registry["selection_eligible"].sum()) if not registry.empty else 0
+    )
     lines = [
         "# Experiment Registry",
         "",
         f"Total runs: {len(registry)}",
+        f"Selection eligible: {eligible_count}",
+        f"Selection ineligible: {len(registry) - eligible_count}",
         "",
     ]
     if registry.empty:
@@ -152,6 +380,8 @@ def _registry_markdown(registry: pd.DataFrame) -> str:
 
     visible_columns = [
         "run_id",
+        "experiment_name",
+        "matrix_status",
         "total_timesteps",
         "action_temperature",
         "ent_coef",
@@ -159,6 +389,8 @@ def _registry_markdown(registry: pd.DataFrame) -> str:
         "validation_total_return",
         "validation_average_weekly_turnover",
         "best_validation_sharpe_ratio",
+        "selection_eligible",
+        "eligibility_issues",
     ]
     lines.extend(_markdown_table(registry.loc[:, visible_columns]))
     return "\n".join(lines) + "\n"
