@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import csv
+import json
 from pathlib import Path
 
 import pytest
 import yaml
 from pydantic import ValidationError
 
-from portfolio_rl.training.experiment_runner import expand_experiment_matrix
+from portfolio_rl.training.experiment_runner import (
+    expand_experiment_matrix,
+    write_experiment_matrix_plan,
+)
 from scripts.run_experiment_matrix import main
 
 
@@ -130,6 +135,136 @@ def test_cli_refuses_execution_without_dry_run(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit, match="2"):
         main(["--config", str(config_path), "--root", str(REPO_ROOT)])
+
+
+def test_write_plan_exports_manifest_runs_and_summary(tmp_path: Path) -> None:
+    outputs = write_experiment_matrix_plan(
+        CONFIG_DIR / "ppo_phase3_temperature_sweep.yaml",
+        root=REPO_ROOT,
+        output_root=tmp_path,
+    )
+
+    manifest = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+    with outputs["runs"].open(newline="", encoding="utf-8") as runs_file:
+        rows = list(csv.DictReader(runs_file))
+    summary = outputs["summary"].read_text(encoding="utf-8")
+
+    assert list(outputs) == ["manifest", "runs", "summary"]
+    assert manifest["schema_version"] == 1
+    assert manifest["experiment_name"] == "ppo_phase3_temperature_sweep"
+    assert manifest["run_count"] == 24
+    assert len(manifest["source_config"]["sha256"]) == 64
+    assert set(manifest["base_configs"]) == {"data", "env", "train"}
+    assert all(
+        len(config["sha256"]) == 64
+        for config in manifest["base_configs"].values()
+    )
+    assert len(rows) == 24
+    assert list(rows[0]) == [
+        "run_id",
+        "seed",
+        "total_timesteps",
+        "status",
+        "env.action_temperature",
+        "ppo.ent_coef",
+    ]
+    assert rows[0]["status"] == "planned"
+    assert rows[0]["env.action_temperature"] == "0.25"
+    assert rows[-1]["ppo.ent_coef"] == "0.01"
+    assert "# Experiment Matrix: ppo_phase3_temperature_sweep" in summary
+    assert "- Planned runs: 24" in summary
+
+
+def test_invalid_matrix_writes_nothing(tmp_path: Path) -> None:
+    config_path = _write_experiment_config(
+        tmp_path / "invalid_write.yaml",
+        overrides={"env.action_temperature": [-1.0]},
+    )
+    output_root = tmp_path / "outputs"
+
+    with pytest.raises(ValidationError, match="action_temperature"):
+        write_experiment_matrix_plan(
+            config_path,
+            root=REPO_ROOT,
+            output_root=output_root,
+        )
+
+    assert not output_root.exists()
+
+
+def test_write_plan_refuses_overwrite_unless_forced(tmp_path: Path) -> None:
+    config_path = _write_experiment_config(tmp_path / "overwrite.yaml")
+    output_root = tmp_path / "outputs"
+    outputs = write_experiment_matrix_plan(
+        config_path,
+        root=REPO_ROOT,
+        output_root=output_root,
+    )
+    unrelated_path = outputs["manifest"].parent / "keep.txt"
+    unrelated_path.write_text("keep", encoding="utf-8")
+    outputs["manifest"].write_text("stale", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="pass force=True"):
+        write_experiment_matrix_plan(
+            config_path,
+            root=REPO_ROOT,
+            output_root=output_root,
+        )
+
+    refreshed = write_experiment_matrix_plan(
+        config_path,
+        root=REPO_ROOT,
+        output_root=output_root,
+        force=True,
+    )
+    manifest = json.loads(refreshed["manifest"].read_text(encoding="utf-8"))
+    assert manifest["run_count"] == 2
+    assert unrelated_path.read_text(encoding="utf-8") == "keep"
+
+
+def test_write_plan_cli_writes_artifacts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = _write_experiment_config(tmp_path / "cli_write.yaml")
+    output_root = tmp_path / "matrix_outputs"
+
+    main(
+        [
+            "--config",
+            str(config_path),
+            "--root",
+            str(REPO_ROOT),
+            "--write-plan",
+            "--output-root",
+            str(output_root),
+        ]
+    )
+    output = capsys.readouterr().out
+
+    matrix_dir = output_root / "test_matrix"
+    assert "manifest:" in output
+    assert set(path.name for path in matrix_dir.iterdir()) == {
+        "experiment_matrix_manifest.json",
+        "runs.csv",
+        "summary.md",
+    }
+
+
+def test_dry_run_rejects_write_only_options(tmp_path: Path) -> None:
+    config_path = _write_experiment_config(tmp_path / "invalid_cli.yaml")
+
+    with pytest.raises(SystemExit, match="2"):
+        main(
+            [
+                "--config",
+                str(config_path),
+                "--root",
+                str(REPO_ROOT),
+                "--dry-run",
+                "--force",
+            ]
+        )
 
 
 def _write_experiment_config(

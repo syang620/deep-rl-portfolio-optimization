@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
+import subprocess
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from itertools import product
 from pathlib import Path
 from typing import Any
@@ -26,6 +30,79 @@ class ExperimentRunPlan:
     seed: int
     total_timesteps: int
     overrides: dict[str, Any]
+
+
+def write_experiment_matrix_plan(
+    config_path: str | Path,
+    *,
+    root: str | Path = ".",
+    output_root: str | Path = "artifacts/experiment_matrices",
+    force: bool = False,
+) -> dict[str, Path]:
+    """Write an auditable matrix plan without executing training."""
+    root_path = Path(root)
+    resolved_config_path = _resolve_path(root_path, config_path)
+    experiment_config = load_phase3_experiment_config(resolved_config_path)
+    plans = expand_experiment_matrix(resolved_config_path, root=root_path)
+
+    matrix_dir = (
+        _resolve_path(root_path, output_root) / experiment_config.experiment_name
+    )
+    outputs = {
+        "manifest": matrix_dir / "experiment_matrix_manifest.json",
+        "runs": matrix_dir / "runs.csv",
+        "summary": matrix_dir / "summary.md",
+    }
+    existing_outputs = [path for path in outputs.values() if path.exists()]
+    if existing_outputs and not force:
+        existing = ", ".join(str(path) for path in existing_outputs)
+        raise FileExistsError(
+            f"experiment matrix plan already exists: {existing}; pass force=True"
+        )
+
+    generated_at = datetime.now(UTC).isoformat()
+    git_commit = _git_commit(root_path)
+    base_config_paths = {
+        "data": _resolve_path(root_path, experiment_config.base_data_config),
+        "env": _resolve_path(root_path, experiment_config.base_env_config),
+        "train": _resolve_path(root_path, experiment_config.base_train_config),
+    }
+    manifest = {
+        "schema_version": 1,
+        "experiment_name": experiment_config.experiment_name,
+        "generated_at": generated_at,
+        "git_commit": git_commit,
+        "source_config": _config_reference(resolved_config_path, root_path),
+        "base_configs": {
+            name: _config_reference(path, root_path)
+            for name, path in base_config_paths.items()
+        },
+        "run_count": len(plans),
+        "runs": [_manifest_run(plan) for plan in plans],
+    }
+    override_keys = sorted({key for plan in plans for key in plan.overrides})
+
+    matrix_dir.mkdir(parents=True, exist_ok=True)
+    outputs["manifest"].write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    outputs["runs"].write_text(
+        _runs_csv(plans, override_keys),
+        encoding="utf-8",
+    )
+    outputs["summary"].write_text(
+        _summary_markdown(
+            experiment_name=experiment_config.experiment_name,
+            generated_at=generated_at,
+            git_commit=git_commit,
+            source_config=_display_path(resolved_config_path, root_path),
+            plans=plans,
+            override_keys=override_keys,
+        ),
+        encoding="utf-8",
+    )
+    return outputs
 
 
 def expand_experiment_matrix(
@@ -151,6 +228,123 @@ def _run_id(
     )
     digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()[:10]
     return f"{prefix}_{digest}"
+
+
+def _manifest_run(plan: ExperimentRunPlan) -> dict[str, Any]:
+    return {
+        "run_id": plan.run_id,
+        "seed": plan.seed,
+        "total_timesteps": plan.total_timesteps,
+        "status": "planned",
+        "overrides": plan.overrides,
+    }
+
+
+def _config_reference(path: Path, root: Path) -> dict[str, str]:
+    return {
+        "path": _display_path(path, root),
+        "sha256": _sha256_file(path),
+    }
+
+
+def _display_path(path: Path, root: Path) -> str:
+    resolved_path = path.resolve()
+    resolved_root = root.resolve()
+    try:
+        return resolved_path.relative_to(resolved_root).as_posix()
+    except ValueError:
+        return str(resolved_path)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file_obj:
+        for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _git_commit(root: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _runs_csv(
+    plans: list[ExperimentRunPlan],
+    override_keys: list[str],
+) -> str:
+    output = io.StringIO(newline="")
+    fieldnames = [
+        "run_id",
+        "seed",
+        "total_timesteps",
+        "status",
+        *override_keys,
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    for plan in plans:
+        row = {
+            "run_id": plan.run_id,
+            "seed": plan.seed,
+            "total_timesteps": plan.total_timesteps,
+            "status": "planned",
+        }
+        row.update(
+            {key: _format_value(plan.overrides[key]) for key in override_keys}
+        )
+        writer.writerow(row)
+    return output.getvalue()
+
+
+def _summary_markdown(
+    *,
+    experiment_name: str,
+    generated_at: str,
+    git_commit: str | None,
+    source_config: str,
+    plans: list[ExperimentRunPlan],
+    override_keys: list[str],
+) -> str:
+    headers = [
+        "run_id",
+        "seed",
+        "total_timesteps",
+        "status",
+        *override_keys,
+    ]
+    lines = [
+        f"# Experiment Matrix: {experiment_name}",
+        "",
+        f"- Generated: {generated_at}",
+        f"- Git commit: {git_commit or 'unavailable'}",
+        f"- Source config: `{source_config}`",
+        f"- Planned runs: {len(plans)}",
+        "",
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for plan in plans:
+        values = [
+            plan.run_id,
+            str(plan.seed),
+            str(plan.total_timesteps),
+            "planned",
+            *[_format_value(plan.overrides[key]) for key in override_keys],
+        ]
+        cells = " | ".join(value.replace("|", "\\|") for value in values)
+        lines.append(f"| {cells} |")
+    return "\n".join(lines) + "\n"
+
+
+def _format_value(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _resolve_path(root: Path, path: str | Path) -> Path:
