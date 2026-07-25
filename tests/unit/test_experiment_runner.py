@@ -14,7 +14,9 @@ from pydantic import ValidationError
 import portfolio_rl.training.experiment_runner as experiment_runner_module
 import scripts.run_experiment_matrix as run_experiment_matrix_script
 from portfolio_rl.training.experiment_runner import (
+    ExperimentMatrixResult,
     ExperimentRunResult,
+    execute_experiment_matrix,
     execute_experiment_run,
     expand_experiment_matrix,
     write_experiment_matrix_plan,
@@ -529,6 +531,210 @@ def test_execute_run_cli_executes_only_selected_run(
     assert captured[0][0] == "selected"
     assert "status: completed" in output
     assert f"model: {model_path}" in output
+
+
+def test_execute_matrix_limits_runs_and_resumes_in_manifest_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = _write_experiment_config(tmp_path / "bounded.yaml")
+    matrix_root = tmp_path / "matrices"
+    experiment_root = tmp_path / "experiments"
+    write_experiment_matrix_plan(
+        config_path,
+        root=REPO_ROOT,
+        output_root=matrix_root,
+    )
+    plans = expand_experiment_matrix(config_path, root=REPO_ROOT)
+    calls: list[str] = []
+
+    def fake_training(**kwargs):
+        calls.append(str(kwargs["run_id"]))
+        return _write_fake_completed_run(kwargs)
+
+    monkeypatch.setattr(
+        experiment_runner_module,
+        "_run_ppo_training",
+        fake_training,
+    )
+
+    first = execute_experiment_matrix(
+        config_path,
+        max_runs=1,
+        root=REPO_ROOT,
+        matrix_output_root=matrix_root,
+        experiment_output_root=experiment_root,
+    )
+    second = execute_experiment_matrix(
+        config_path,
+        max_runs=1,
+        root=REPO_ROOT,
+        matrix_output_root=matrix_root,
+        experiment_output_root=experiment_root,
+    )
+
+    assert calls == [plans[0].run_id, plans[1].run_id]
+    assert first.attempted_count == 1
+    assert first.completed_count == 1
+    assert first.skipped_count == 0
+    assert first.remaining_count == 1
+    assert [result.status for result in first.results] == ["completed"]
+    assert second.attempted_count == 1
+    assert second.completed_count == 2
+    assert second.skipped_count == 1
+    assert second.remaining_count == 0
+    assert [result.status for result in second.results] == [
+        "skipped",
+        "completed",
+    ]
+    manifest = _read_matrix_manifest(matrix_root, "test_matrix")
+    assert [
+        _manifest_record(manifest, plan.run_id)["status"] for plan in plans
+    ] == ["completed", "completed"]
+
+
+def test_execute_matrix_stops_on_failure_and_refuses_failed_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = _write_experiment_config(tmp_path / "fail_fast.yaml")
+    matrix_root = tmp_path / "matrices"
+    write_experiment_matrix_plan(
+        config_path,
+        root=REPO_ROOT,
+        output_root=matrix_root,
+    )
+    plans = expand_experiment_matrix(config_path, root=REPO_ROOT)
+    calls: list[str] = []
+
+    def fail_training(**kwargs):
+        calls.append(str(kwargs["run_id"]))
+        raise RuntimeError("campaign child failed")
+
+    monkeypatch.setattr(
+        experiment_runner_module,
+        "_run_ppo_training",
+        fail_training,
+    )
+
+    with pytest.raises(RuntimeError, match="campaign child failed"):
+        execute_experiment_matrix(
+            config_path,
+            max_runs=2,
+            root=REPO_ROOT,
+            matrix_output_root=matrix_root,
+            experiment_output_root=tmp_path / "experiments",
+        )
+    with pytest.raises(RuntimeError, match="unresolved running or failed"):
+        execute_experiment_matrix(
+            config_path,
+            max_runs=1,
+            root=REPO_ROOT,
+            matrix_output_root=matrix_root,
+            experiment_output_root=tmp_path / "experiments",
+        )
+
+    assert calls == [plans[0].run_id]
+    manifest = _read_matrix_manifest(matrix_root, "test_matrix")
+    assert _manifest_record(manifest, plans[0].run_id)["status"] == "failed"
+    assert _manifest_record(manifest, plans[1].run_id)["status"] == "planned"
+
+
+def test_execute_matrix_rejects_non_positive_limit(tmp_path: Path) -> None:
+    config_path = _write_experiment_config(tmp_path / "invalid_limit.yaml")
+
+    for max_runs in (0, -1, False):
+        with pytest.raises(ValueError, match="positive integer"):
+            execute_experiment_matrix(
+                config_path,
+                max_runs=max_runs,
+                root=REPO_ROOT,
+            )
+
+
+def test_execute_matrix_refuses_running_run_before_training(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = _write_experiment_config(tmp_path / "running.yaml")
+    matrix_root = tmp_path / "matrices"
+    outputs = write_experiment_matrix_plan(
+        config_path,
+        root=REPO_ROOT,
+        output_root=matrix_root,
+    )
+    manifest = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+    manifest["runs"][0]["status"] = "running"
+    outputs["manifest"].write_text(json.dumps(manifest), encoding="utf-8")
+    called = False
+
+    def fake_training(**kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        experiment_runner_module,
+        "_run_ppo_training",
+        fake_training,
+    )
+
+    with pytest.raises(RuntimeError, match="unresolved running or failed"):
+        execute_experiment_matrix(
+            config_path,
+            max_runs=1,
+            root=REPO_ROOT,
+            matrix_output_root=matrix_root,
+            experiment_output_root=tmp_path / "experiments",
+        )
+
+    assert called is False
+
+
+def test_execute_matrix_cli_requires_limit_and_prints_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    model_path = tmp_path / "experiments" / "first" / "model.zip"
+    captured: list[dict[str, object]] = []
+
+    def fake_execute(config_path, **kwargs):
+        captured.append(kwargs)
+        return ExperimentMatrixResult(
+            results=(
+                ExperimentRunResult(
+                    run_id="first",
+                    status="completed",
+                    model_path=model_path,
+                ),
+            ),
+            attempted_count=1,
+            completed_count=1,
+            skipped_count=0,
+            remaining_count=1,
+        )
+
+    monkeypatch.setattr(
+        run_experiment_matrix_script,
+        "execute_experiment_matrix",
+        fake_execute,
+    )
+    argv = [
+        "--config",
+        "configs/experiments/ppo_phase3_seed_sweep.yaml",
+        "--root",
+        str(REPO_ROOT),
+        "--execute-matrix",
+    ]
+    with pytest.raises(SystemExit, match="2"):
+        run_experiment_matrix_script.main(argv)
+
+    run_experiment_matrix_script.main([*argv, "--max-runs", "1"])
+    output = capsys.readouterr().out
+
+    assert captured[0]["max_runs"] == 1
+    assert f"first\tcompleted\t{model_path}" in output
+    assert "summary: attempted=1 completed=1 skipped=0 remaining=1" in output
 
 
 def _write_experiment_config(

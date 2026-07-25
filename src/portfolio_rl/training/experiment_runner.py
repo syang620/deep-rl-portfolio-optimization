@@ -48,6 +48,128 @@ class ExperimentRunResult:
     model_path: Path
 
 
+@dataclass(frozen=True)
+class ExperimentMatrixResult:
+    """Outcome of one bounded sequential matrix execution."""
+
+    results: tuple[ExperimentRunResult, ...]
+    attempted_count: int
+    completed_count: int
+    skipped_count: int
+    remaining_count: int
+
+
+def execute_experiment_matrix(
+    config_path: str | Path,
+    *,
+    max_runs: int,
+    root: str | Path = ".",
+    matrix_output_root: str | Path = "artifacts/experiment_matrices",
+    experiment_output_root: str | Path = "artifacts/experiments",
+) -> ExperimentMatrixResult:
+    """Execute a bounded number of planned runs in persisted matrix order."""
+    if isinstance(max_runs, bool) or max_runs <= 0:
+        raise ValueError("max_runs must be a positive integer")
+
+    root_path = Path(root)
+    resolved_config_path = _resolve_path(root_path, config_path)
+    experiment_config = load_phase3_experiment_config(resolved_config_path)
+    matrix_dir = (
+        _resolve_path(root_path, matrix_output_root)
+        / experiment_config.experiment_name
+    )
+    manifest = _read_matrix_manifest(
+        _matrix_output_paths(matrix_dir)["manifest"]
+    )
+    _verify_matrix_manifest(
+        manifest=manifest,
+        experiment_config=experiment_config,
+        config_path=resolved_config_path,
+        root=root_path,
+    )
+    plans = expand_experiment_matrix(resolved_config_path, root=root_path)
+    for plan in plans:
+        _verify_manifest_run(manifest, plan)
+
+    runs = manifest.get("runs")
+    if (
+        not isinstance(runs, list)
+        or len(runs) != len(plans)
+        or manifest.get("run_count") != len(plans)
+    ):
+        raise ValueError("persisted matrix run inventory is incomplete")
+    records = {
+        record.get("run_id"): record
+        for record in runs
+        if isinstance(record, dict)
+    }
+    if len(records) != len(plans):
+        raise ValueError("persisted matrix run inventory contains duplicates")
+
+    blocked = [
+        plan.run_id
+        for plan in plans
+        if records[plan.run_id].get("status") in {"running", "failed"}
+    ]
+    if blocked:
+        raise RuntimeError(
+            "matrix contains unresolved running or failed runs: "
+            + ", ".join(blocked)
+        )
+    invalid_statuses = [
+        plan.run_id
+        for plan in plans
+        if records[plan.run_id].get("status") not in {"planned", "completed"}
+    ]
+    if invalid_statuses:
+        raise ValueError(
+            "matrix contains unsupported run statuses: "
+            + ", ".join(invalid_statuses)
+        )
+
+    results_by_run_id: dict[str, ExperimentRunResult] = {}
+    for plan in plans:
+        if records[plan.run_id].get("status") == "completed":
+            results_by_run_id[plan.run_id] = execute_experiment_run(
+                resolved_config_path,
+                plan.run_id,
+                root=root_path,
+                matrix_output_root=matrix_output_root,
+                experiment_output_root=experiment_output_root,
+            )
+
+    attempted_count = 0
+    for plan in plans:
+        status = records[plan.run_id].get("status")
+        if status != "planned" or attempted_count >= max_runs:
+            continue
+        results_by_run_id[plan.run_id] = execute_experiment_run(
+            resolved_config_path,
+            plan.run_id,
+            root=root_path,
+            matrix_output_root=matrix_output_root,
+            experiment_output_root=experiment_output_root,
+        )
+        attempted_count += 1
+
+    results = tuple(
+        results_by_run_id[plan.run_id]
+        for plan in plans
+        if plan.run_id in results_by_run_id
+    )
+    skipped_count = sum(result.status == "skipped" for result in results)
+    return ExperimentMatrixResult(
+        results=results,
+        attempted_count=attempted_count,
+        completed_count=skipped_count + attempted_count,
+        skipped_count=skipped_count,
+        remaining_count=sum(
+            record.get("status") == "planned" for record in records.values()
+        )
+        - attempted_count,
+    )
+
+
 def execute_experiment_run(
     config_path: str | Path,
     run_id: str,
