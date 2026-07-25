@@ -8,8 +8,9 @@ baseline comparison.
 Phase 2 is complete. The current focus is Phase 3: turning the tested RL
 research environment into a reproducible experimentation, model-selection, and
 robustness workflow. Phase 3 experiment configs and the experiment registry are
-implemented; experiment-matrix execution, research sweeps, model selection, and
-robustness diagnostics are the next steps.
+implemented, and persisted experiment matrices support bounded sequential
+execution. Research sweeps, model selection, and robustness diagnostics are the
+next steps.
 
 ## Architecture
 
@@ -41,6 +42,13 @@ python scripts/train_ppo.py
 python scripts/evaluate_policy.py --model-path artifacts/experiments/<run_id>/model.zip
 python scripts/compare_validation.py
 python scripts/list_experiments.py
+python scripts/run_experiment_matrix.py \
+  --config configs/experiments/ppo_phase3_smoke.yaml \
+  --write-plan
+python scripts/run_experiment_matrix.py \
+  --config configs/experiments/ppo_phase3_smoke.yaml \
+  --execute-matrix \
+  --max-runs 1
 ```
 
 Generated data and experiment outputs are written under `data/` and
