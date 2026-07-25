@@ -5,9 +5,11 @@ The project builds a reproducible pipeline from market data ingestion through
 feature engineering, Gymnasium environment simulation, PPO training, and
 baseline comparison.
 
-The current focus is Phase 2: a tested RL research environment where learned
-policies are evaluated against deterministic portfolio baselines under the same
-transaction-cost and weight-drift mechanics.
+Phase 2 is complete. The current focus is Phase 3: turning the tested RL
+research environment into a reproducible experimentation, model-selection, and
+robustness workflow. Phase 3 experiment configs and the experiment registry are
+implemented; experiment-matrix execution, research sweeps, model selection, and
+robustness diagnostics are the next steps.
 
 ## Architecture
 
@@ -19,7 +21,7 @@ src/portfolio_rl/features/ Feature engineering, normalization, model matrix
 src/portfolio_rl/env/     Gymnasium portfolio environment and mechanics
 src/portfolio_rl/policies/ Baseline policies and SB3 policy adapter
 src/portfolio_rl/evaluation/ Backtests, metrics, and validation reports
-src/portfolio_rl/training/ PPO training and validation checkpoint callbacks
+src/portfolio_rl/training/ PPO training, validation checkpoints, experiment registry
 tests/                    Unit and integration coverage
 docs/                     Planning documents and technical references
 ```
@@ -38,6 +40,7 @@ python scripts/run_baselines.py
 python scripts/train_ppo.py
 python scripts/evaluate_policy.py --model-path artifacts/experiments/<run_id>/model.zip
 python scripts/compare_validation.py
+python scripts/list_experiments.py
 ```
 
 Generated data and experiment outputs are written under `data/` and
@@ -76,5 +79,7 @@ deterministically on validation before final test evaluation.
   architecture, data flow, and experiment design.
 - [`docs/planning/phase_1.md`](docs/planning/phase_1.md): Phase 1 data pipeline
   plan.
-- [`docs/planning/phase_2.md`](docs/planning/phase_2.md): active Phase 2 RL
+- [`docs/planning/phase_2.md`](docs/planning/phase_2.md): completed Phase 2 RL
   environment, training, and evaluation blueprint.
+- [`docs/planning/phase_3.md`](docs/planning/phase_3.md): active Phase 3
+  experimentation, model-selection, and robustness plan.
