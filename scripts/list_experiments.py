@@ -18,6 +18,11 @@ def main(argv: list[str] | None = None) -> None:
         help="Directory containing experiment artifact bundles.",
     )
     parser.add_argument(
+        "--matrix-root",
+        default="artifacts/experiment_matrices",
+        help="Directory containing persisted experiment matrix manifests.",
+    )
+    parser.add_argument(
         "--output",
         default="artifacts/experiments/registry",
         help="Output path prefix without extension.",
@@ -26,6 +31,7 @@ def main(argv: list[str] | None = None) -> None:
 
     outputs = write_experiment_registry(
         experiment_root=Path(args.experiment_root),
+        matrix_root=Path(args.matrix_root),
         output_prefix=Path(args.output),
     )
     for output_type, output_path in outputs.items():
