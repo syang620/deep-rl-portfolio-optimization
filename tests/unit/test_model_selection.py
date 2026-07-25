@@ -36,6 +36,7 @@ def test_seed_stability_aggregates_configuration_across_seeds(
     row = stability.iloc[0]
 
     assert len(stability) == 1
+    assert row["metric_source"] == "best_checkpoint"
     assert row["planned_seed_count"] == 3
     assert row["eligible_seed_count"] == 3
     assert row["ineligible_seed_count"] == 0
@@ -164,6 +165,16 @@ def test_seed_stability_rejects_malformed_inputs(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="does not match"):
         aggregate_seed_stability(mismatched, manifest_path)
 
+    unsupported_checkpoint = registry.copy()
+    unsupported_checkpoint.loc[0, "selection_checkpoint"] = "final_endpoint"
+    with pytest.raises(ValueError, match="unsupported selection checkpoint"):
+        aggregate_seed_stability(unsupported_checkpoint, manifest_path)
+
+    missing_model = registry.copy()
+    missing_model.loc[0, "selection_model_path"] = ""
+    with pytest.raises(ValueError, match="no selection model path"):
+        aggregate_seed_stability(missing_model, manifest_path)
+
     duplicate_manifest = json.loads(
         manifest_path.read_text(encoding="utf-8")
     )
@@ -201,7 +212,11 @@ def test_seed_stability_writes_csv_markdown_and_cli_outputs(
 
     assert list(outputs) == ["csv", "markdown"]
     assert pd.read_csv(outputs["csv"]).loc[0, "ranking_ready"]
-    assert "Validation-only statistics; the test split was not accessed." in markdown
+    assert (
+        "Validation-only best-checkpoint statistics; the test split was not "
+        "accessed."
+        in markdown
+    )
     assert "Ranking ready: 1" in markdown
 
     cli_output_dir = tmp_path / "cli_output"
@@ -238,11 +253,15 @@ def _registry_row(
         "experiment_name": experiment_name,
         "selection_eligible": eligible,
         "eligibility_issues": issues,
-        "validation_sharpe_ratio": sharpe,
-        "validation_total_return": total_return,
-        "validation_max_drawdown": -0.08,
-        "validation_average_weekly_turnover": 0.12,
-        "validation_transaction_cost_drag": 0.01,
+        "selection_checkpoint": "best_checkpoint",
+        "selection_model_path": f"artifacts/experiments/{run_id}/best_model.zip",
+        "selection_validation_sharpe_ratio": sharpe,
+        "selection_validation_total_return": total_return,
+        "selection_validation_max_drawdown": -0.08,
+        "selection_validation_average_weekly_turnover": 0.12,
+        "selection_validation_transaction_cost_drag": 0.01,
+        "validation_sharpe_ratio": 99.0,
+        "validation_total_return": 99.0,
     }
 
 

@@ -43,6 +43,7 @@ def test_candidate_ranking_selects_passing_configuration(
         result.outputs["selected_configuration"].read_text(encoding="utf-8")
     )
     assert selected["configuration_id"] == "passing"
+    assert selected["metric_source"] == "best_checkpoint"
     assert selected["overrides"] == {"ppo.ent_coef": 0.01}
     assert selected["eligible_seeds"] == [7, 42, 101]
     assert selected["validation_only"] is True
@@ -227,6 +228,7 @@ def _candidate(configuration_id: str) -> dict[str, object]:
     return {
         "configuration_id": configuration_id,
         "experiment_name": "test_matrix",
+        "metric_source": "best_checkpoint",
         "total_timesteps": 500000,
         "overrides": '{"ppo.ent_coef":0.01}',
         "planned_seed_count": 3,

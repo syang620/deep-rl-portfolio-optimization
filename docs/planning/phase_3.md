@@ -367,8 +367,20 @@ validation_transaction_cost_drag
 best_validation_sharpe_ratio
 model_path
 best_model_path
+selection_checkpoint
+selection_model_path
+selection_validation_total_return
+selection_validation_sharpe_ratio
+selection_validation_max_drawdown
+selection_validation_average_weekly_turnover
+selection_validation_transaction_cost_drag
 manifest_path
 ```
+
+The registry retains `validation_*` metrics for the final training endpoint.
+Model selection uses explicit `selection_validation_*` metrics and
+`selection_model_path`, sourced from `best_metrics_validation.json` and
+`best_model.zip` without falling back to the final endpoint.
 
 ### 5.4 Model-selection report
 

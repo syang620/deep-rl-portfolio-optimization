@@ -22,21 +22,35 @@ REQUIRED_REGISTRY_COLUMNS = [
     "experiment_name",
     "selection_eligible",
     "eligibility_issues",
-    "validation_sharpe_ratio",
-    "validation_total_return",
-    "validation_max_drawdown",
-    "validation_average_weekly_turnover",
-    "validation_transaction_cost_drag",
+    "selection_checkpoint",
+    "selection_model_path",
+    "selection_validation_sharpe_ratio",
+    "selection_validation_total_return",
+    "selection_validation_max_drawdown",
+    "selection_validation_average_weekly_turnover",
+    "selection_validation_transaction_cost_drag",
 ]
+SELECTION_CHECKPOINT = "best_checkpoint"
+SELECTION_METRIC_COLUMNS = {
+    "validation_sharpe_ratio": "selection_validation_sharpe_ratio",
+    "validation_total_return": "selection_validation_total_return",
+    "validation_max_drawdown": "selection_validation_max_drawdown",
+    "validation_average_weekly_turnover": (
+        "selection_validation_average_weekly_turnover"
+    ),
+    "validation_transaction_cost_drag": (
+        "selection_validation_transaction_cost_drag"
+    ),
+}
 AGGREGATE_METRICS = [
-    "validation_total_return",
-    "validation_max_drawdown",
-    "validation_average_weekly_turnover",
-    "validation_transaction_cost_drag",
+    metric
+    for metric in SELECTION_METRIC_COLUMNS
+    if metric != "validation_sharpe_ratio"
 ]
 SEED_STABILITY_COLUMNS = [
     "configuration_id",
     "experiment_name",
+    "metric_source",
     "total_timesteps",
     "overrides",
     "planned_seed_count",
@@ -76,6 +90,7 @@ BASELINE_METRICS = [
 REQUIRED_STABILITY_COLUMNS = [
     "configuration_id",
     "experiment_name",
+    "metric_source",
     "total_timesteps",
     "overrides",
     "planned_seed_count",
@@ -457,6 +472,7 @@ def _aggregate_configuration(
     row = {
         "configuration_id": config_id,
         "experiment_name": experiment_name,
+        "metric_source": SELECTION_CHECKPOINT,
         "total_timesteps": runs[0]["total_timesteps"],
         "overrides": _canonical_json(runs[0]["overrides"]),
         "planned_seed_count": planned_count,
@@ -482,14 +498,17 @@ def _aggregate_configuration(
 
 def _metric_statistics(frame: pd.DataFrame) -> dict[str, float | None]:
     output: dict[str, float | None] = {}
-    sharpe = _numeric_series(frame, "validation_sharpe_ratio")
+    sharpe = _numeric_series(
+        frame,
+        SELECTION_METRIC_COLUMNS["validation_sharpe_ratio"],
+    )
     for statistic in ("mean", "median", "std", "min", "max"):
         output[f"validation_sharpe_ratio_{statistic}"] = _statistic(
             sharpe,
             statistic,
         )
     for metric in AGGREGATE_METRICS:
-        values = _numeric_series(frame, metric)
+        values = _numeric_series(frame, SELECTION_METRIC_COLUMNS[metric])
         for statistic in ("median", "std"):
             output[f"{metric}_{statistic}"] = _statistic(values, statistic)
     return output
@@ -525,7 +544,18 @@ def _validate_registry(registry: pd.DataFrame) -> None:
 
 
 def _validate_eligible_metrics(row: pd.Series, run_id: str) -> None:
-    metric_columns = ["validation_sharpe_ratio", *AGGREGATE_METRICS]
+    if row["selection_checkpoint"] != SELECTION_CHECKPOINT:
+        raise ValueError(
+            f"eligible registry run has unsupported selection checkpoint "
+            f"({run_id}): {row['selection_checkpoint']!r}"
+        )
+    if not isinstance(row["selection_model_path"], str) or not row[
+        "selection_model_path"
+    ]:
+        raise ValueError(
+            f"eligible registry run has no selection model path: {run_id}"
+        )
+    metric_columns = list(SELECTION_METRIC_COLUMNS.values())
     invalid = [
         column for column in metric_columns if not _finite_number(row[column])
     ]
@@ -739,6 +769,7 @@ def _selected_configuration(
         "selected_at": datetime.now(UTC).isoformat(),
         "experiment_name": str(candidate["experiment_name"]),
         "configuration_id": str(candidate["configuration_id"]),
+        "metric_source": str(candidate["metric_source"]),
         "total_timesteps": int(candidate["total_timesteps"]),
         "overrides": json.loads(str(candidate["overrides"])),
         "planned_seeds": json.loads(str(candidate["planned_seeds"])),
@@ -786,7 +817,10 @@ def _candidate_ranking_markdown(ranked: pd.DataFrame) -> str:
     lines = [
         f"# Candidate Ranking: {experiment_name}",
         "",
-        "Validation-only ranking; the test split was not accessed.",
+        (
+            "Validation-only ranking using best checkpoints; the test split "
+            "was not accessed."
+        ),
         "",
         f"Configurations: {len(ranked)}",
         f"Passed all gates: {passing_count}",
@@ -820,6 +854,7 @@ def _validation_selection_report(
         "# Validation Configuration Selection",
         "",
         "Selection used validation metrics only. The test split was not accessed.",
+        f"Metric source: `{ranked.iloc[0]['metric_source']}`.",
         "",
         "## Gate Policy",
         "",
@@ -879,7 +914,10 @@ def _seed_stability_markdown(stability: pd.DataFrame) -> str:
     lines = [
         f"# Seed Stability: {experiment_name}",
         "",
-        "Validation-only statistics; the test split was not accessed.",
+        (
+            "Validation-only best-checkpoint statistics; the test split was "
+            "not accessed."
+        ),
         "",
         f"Configurations: {len(stability)}",
         f"Ranking ready: {ready_count}",

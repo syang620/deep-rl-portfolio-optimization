@@ -31,6 +31,13 @@ def test_registry_loads_complete_experiment(tmp_path: Path) -> None:
     assert row["best_validation_sharpe_ratio"] == 1.40
     assert row["model_path"].endswith("complete/model.zip")
     assert row["best_model_path"].endswith("complete/best_model.zip")
+    assert row["selection_checkpoint"] == "best_checkpoint"
+    assert row["selection_model_path"].endswith("complete/best_model.zip")
+    assert row["selection_validation_total_return"] == 0.22
+    assert row["selection_validation_sharpe_ratio"] == 1.40
+    assert row["selection_validation_max_drawdown"] == -0.06
+    assert row["selection_validation_average_weekly_turnover"] == 0.08
+    assert row["selection_validation_transaction_cost_drag"] == 0.004
     assert row["manifest_path"].endswith("complete/manifest.json")
     assert bool(row["artifact_complete"]) is True
     assert bool(row["selection_eligible"]) is False
@@ -45,6 +52,14 @@ def test_registry_handles_missing_best_metrics(tmp_path: Path) -> None:
 
     assert pd.isna(row["best_validation_sharpe_ratio"])
     assert pd.isna(row["best_model_path"])
+    assert pd.isna(row["selection_model_path"])
+    assert bool(row["artifact_complete"]) is False
+    assert bool(row["metrics_complete"]) is False
+    assert bool(row["selection_eligible"]) is False
+    assert "missing_artifact:best_model.zip" in row["eligibility_issues"]
+    assert "missing_artifact:best_metrics_validation.json" in row[
+        "eligibility_issues"
+    ]
 
 
 def test_registry_extracts_env_and_train_config_values(tmp_path: Path) -> None:
@@ -146,6 +161,7 @@ def test_registry_reports_artifact_and_metric_integrity_issues(
         "missing",
         "hash",
         "metric",
+        "best_metric",
         "nav",
         "unreadable",
         "corrupt",
@@ -161,6 +177,12 @@ def test_registry_reports_artifact_and_metric_integrity_issues(
     metrics = json.loads(metric_path.read_text(encoding="utf-8"))
     metrics["sharpe_ratio"] = float("nan")
     _write_json(metric_path, metrics)
+    best_metric_path = (
+        experiment_root / "best_metric" / "best_metrics_validation.json"
+    )
+    best_metrics = json.loads(best_metric_path.read_text(encoding="utf-8"))
+    best_metrics["transaction_cost_drag"] = None
+    _write_json(best_metric_path, best_metrics)
     pd.DataFrame({"nav": [1.0, -0.1]}).to_parquet(
         experiment_root / "nav" / "validation_nav.parquet",
         index=False,
@@ -179,6 +201,10 @@ def test_registry_reports_artifact_and_metric_integrity_issues(
     assert "missing_artifact:validation_trades.parquet" in issues["missing"]
     assert "hash_mismatch:config.yaml" in issues["hash"]
     assert "invalid_metric:sharpe_ratio" in issues["metric"]
+    assert (
+        "invalid_best_metric:transaction_cost_drag"
+        in issues["best_metric"]
+    )
     assert "invalid_validation_nav" in issues["nav"]
     assert (
         "unreadable_artifact:validation_nav.parquet"
@@ -320,7 +346,13 @@ evaluation:
     if include_best:
         _write_json(
             run_dir / "best_metrics_validation.json",
-            {"sharpe_ratio": 1.40},
+            {
+                "total_return": 0.22,
+                "sharpe_ratio": 1.40,
+                "max_drawdown": -0.06,
+                "average_weekly_turnover": 0.08,
+                "transaction_cost_drag": 0.004,
+            },
         )
         (run_dir / "best_model.zip").write_text("best", encoding="utf-8")
 

@@ -38,6 +38,13 @@ REGISTRY_COLUMNS = [
     "best_validation_sharpe_ratio",
     "model_path",
     "best_model_path",
+    "selection_checkpoint",
+    "selection_model_path",
+    "selection_validation_total_return",
+    "selection_validation_sharpe_ratio",
+    "selection_validation_max_drawdown",
+    "selection_validation_average_weekly_turnover",
+    "selection_validation_transaction_cost_drag",
     "manifest_path",
     "artifact_complete",
     "reproducible",
@@ -48,7 +55,9 @@ REGISTRY_COLUMNS = [
 
 REQUIRED_ARTIFACTS = [
     "model.zip",
+    "best_model.zip",
     "metrics_validation.json",
+    "best_metrics_validation.json",
     "manifest.json",
     "config.yaml",
     "env.yaml",
@@ -127,18 +136,24 @@ def _experiment_row(
     metrics, metrics_issue = _read_json_artifact(
         run_dir / "metrics_validation.json"
     )
-    best_metrics, _ = _read_json_artifact(
+    best_metrics, best_metrics_issue = _read_json_artifact(
         run_dir / "best_metrics_validation.json"
     )
     read_issues = [
         issue
-        for issue in [env_issue, train_issue, metrics_issue]
+        for issue in [
+            env_issue,
+            train_issue,
+            metrics_issue,
+            best_metrics_issue,
+        ]
         if issue is not None
     ]
     eligibility = _eligibility(
         run_dir,
         manifest,
         metrics,
+        best_metrics,
         matrix_record,
         read_issues,
     )
@@ -176,6 +191,17 @@ def _experiment_row(
         "best_validation_sharpe_ratio": best_metrics.get("sharpe_ratio"),
         "model_path": _path_if_exists(run_dir / "model.zip"),
         "best_model_path": _path_if_exists(run_dir / "best_model.zip"),
+        "selection_checkpoint": "best_checkpoint",
+        "selection_model_path": _path_if_exists(run_dir / "best_model.zip"),
+        "selection_validation_total_return": best_metrics.get("total_return"),
+        "selection_validation_sharpe_ratio": best_metrics.get("sharpe_ratio"),
+        "selection_validation_max_drawdown": best_metrics.get("max_drawdown"),
+        "selection_validation_average_weekly_turnover": best_metrics.get(
+            "average_weekly_turnover"
+        ),
+        "selection_validation_transaction_cost_drag": best_metrics.get(
+            "transaction_cost_drag"
+        ),
         "manifest_path": str(manifest_path),
         **eligibility,
     }
@@ -228,6 +254,7 @@ def _eligibility(
     run_dir: Path,
     manifest: dict[str, Any],
     metrics: dict[str, Any],
+    best_metrics: dict[str, Any],
     matrix_record: dict[str, Any] | None,
     read_issues: list[str],
 ) -> dict[str, Any]:
@@ -271,8 +298,16 @@ def _eligibility(
         for name in REQUIRED_METRICS
         if not _is_finite_number(metrics.get(name))
     ]
+    invalid_best_metrics = [
+        name
+        for name in REQUIRED_METRICS
+        if not _is_finite_number(best_metrics.get(name))
+    ]
     issues.extend(f"invalid_metric:{name}" for name in invalid_metrics)
-    metrics_complete = not invalid_metrics
+    issues.extend(
+        f"invalid_best_metric:{name}" for name in invalid_best_metrics
+    )
+    metrics_complete = not invalid_metrics and not invalid_best_metrics
     issues.extend(_validation_nav_issues(run_dir / "validation_nav.parquet"))
 
     return {
@@ -389,6 +424,9 @@ def _registry_markdown(registry: pd.DataFrame) -> str:
         "validation_total_return",
         "validation_average_weekly_turnover",
         "best_validation_sharpe_ratio",
+        "selection_checkpoint",
+        "selection_validation_sharpe_ratio",
+        "selection_validation_total_return",
         "selection_eligible",
         "eligibility_issues",
     ]
