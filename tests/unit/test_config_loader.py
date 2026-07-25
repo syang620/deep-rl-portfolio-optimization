@@ -58,6 +58,12 @@ def test_valid_phase3_evaluation_config_loads_successfully() -> None:
         "average_weekly_turnover",
         "transaction_cost_drag",
     ]
+    assert config.selection.min_eligible_seeds == 3
+    assert config.selection.require_beats_shy_total_return is True
+    assert config.selection.equal_weight_sharpe_tolerance == 0.10
+    assert config.selection.equal_weight_drawdown_tolerance == 0.02
+    assert config.selection.max_median_weekly_turnover == 0.50
+    assert config.selection.max_median_transaction_cost_drag == 0.025
 
 
 def test_valid_phase3_experiment_configs_load_successfully() -> None:
@@ -172,6 +178,12 @@ selection:
   primary_metric: sharpe_ratio
   higher_is_better: true
   tie_breakers: [max_drawdown]
+  min_eligible_seeds: 3
+  require_beats_shy_total_return: true
+  equal_weight_sharpe_tolerance: 0.10
+  equal_weight_drawdown_tolerance: 0.02
+  max_median_weekly_turnover: 0.50
+  max_median_transaction_cost_drag: 0.025
 unexpected_key: true
 """,
         encoding="utf-8",

@@ -406,12 +406,30 @@ class SelectionConfig(StrictConfigModel):
     primary_metric: str
     higher_is_better: bool
     tie_breakers: list[str] = Field(min_length=1)
+    min_eligible_seeds: int = Field(ge=1)
+    require_beats_shy_total_return: bool
+    equal_weight_sharpe_tolerance: float = Field(ge=0.0)
+    equal_weight_drawdown_tolerance: float = Field(ge=0.0)
+    max_median_weekly_turnover: float = Field(ge=0.0)
+    max_median_transaction_cost_drag: float = Field(ge=0.0)
 
     @field_validator("primary_metric")
     @classmethod
     def require_primary_metric(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("primary_metric must not be empty")
+        return value
+
+    @field_validator(
+        "equal_weight_sharpe_tolerance",
+        "equal_weight_drawdown_tolerance",
+        "max_median_weekly_turnover",
+        "max_median_transaction_cost_drag",
+    )
+    @classmethod
+    def require_finite_selection_thresholds(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("selection thresholds must be finite")
         return value
 
 

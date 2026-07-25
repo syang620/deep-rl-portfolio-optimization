@@ -9,9 +9,9 @@ Phase 2 is complete. The current focus is Phase 3: turning the tested RL
 research environment into a reproducible experimentation, model-selection, and
 robustness workflow. Phase 3 experiment configs and the experiment registry are
 implemented, and persisted experiment matrices support bounded sequential
-execution. Selection-ready registries and validation-only seed-stability
-aggregation are implemented; candidate ranking, research sweeps, and robustness
-diagnostics are the next steps.
+execution. Selection-ready registries, validation-only seed aggregation, and
+baseline-gated configuration ranking are implemented. Research sweeps and
+robustness diagnostics are the next steps.
 
 ## Architecture
 
@@ -56,6 +56,11 @@ python scripts/summarize_experiment.py \
   --matrix-manifest \
   artifacts/experiment_matrices/ppo_phase3_smoke/experiment_matrix_manifest.json \
   --output-dir artifacts/model_selection/ppo_phase3_smoke
+python scripts/select_model.py \
+  --seed-stability artifacts/model_selection/<experiment>/seed_stability.csv \
+  --baseline-root artifacts/backtests/baselines_validation \
+  --config configs/evaluation.yaml \
+  --output-dir artifacts/model_selection/<experiment>
 ```
 
 Generated data and experiment outputs are written under `data/` and

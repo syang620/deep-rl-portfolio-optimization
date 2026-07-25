@@ -30,3 +30,9 @@ selection:
     - max_drawdown
     - average_weekly_turnover
     - transaction_cost_drag
+  min_eligible_seeds: 3
+  require_beats_shy_total_return: true
+  equal_weight_sharpe_tolerance: 0.10
+  equal_weight_drawdown_tolerance: 0.02
+  max_median_weekly_turnover: 0.50
+  max_median_transaction_cost_drag: 0.025
