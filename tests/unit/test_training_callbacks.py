@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,6 +9,7 @@ import pytest
 pytest.importorskip("stable_baselines3")
 
 from portfolio_rl.training.callbacks import (  # noqa: E402
+    ValidationCheckpointCallback,
     is_metric_improvement,
     validation_metric_value,
 )
@@ -52,6 +55,40 @@ def test_is_metric_improvement_requires_higher_finite_value() -> None:
     assert is_metric_improvement(None, 0.2) is False
     assert is_metric_improvement(float("nan"), 0.2) is False
     assert is_metric_improvement(np.inf, 0.2) is False
+
+
+def test_training_end_evaluates_a_new_final_timestep(tmp_path) -> None:
+    callback = _validation_callback(tmp_path)
+    callback.num_timesteps = 100
+    callback._last_eval_timestep = 75
+    callback._run_validation = Mock()
+
+    callback._on_training_end()
+
+    callback._run_validation.assert_called_once_with()
+
+
+def test_training_end_skips_an_already_evaluated_timestep(tmp_path) -> None:
+    callback = _validation_callback(tmp_path)
+    callback.num_timesteps = 100
+    callback._last_eval_timestep = 100
+    callback._run_validation = Mock()
+
+    callback._on_training_end()
+
+    callback._run_validation.assert_not_called()
+
+
+def _validation_callback(tmp_path) -> ValidationCheckpointCallback:
+    return ValidationCheckpointCallback(
+        validation_store=None,
+        action_temperature=0.5,
+        rebalance_frequency_trading_days=5,
+        transaction_cost_bps=10.0,
+        eval_freq_timesteps=25,
+        metric_for_best_model="sharpe_ratio",
+        output_dir=tmp_path,
+    )
 
 
 def _nav_frame(nav_values: list[float] | None = None) -> pd.DataFrame:

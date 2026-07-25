@@ -62,6 +62,56 @@ def test_registry_handles_missing_best_metrics(tmp_path: Path) -> None:
     ]
 
 
+def test_registry_selects_final_endpoint_when_score_is_higher(
+    tmp_path: Path,
+) -> None:
+    _write_experiment(
+        tmp_path / "final_wins",
+        final_sharpe=1.50,
+        best_sharpe=1.40,
+    )
+
+    row = build_experiment_registry(
+        tmp_path,
+        matrix_root=None,
+    ).iloc[0]
+
+    assert row["selection_checkpoint"] == "final_endpoint"
+    assert row["selection_model_path"].endswith("final_wins/model.zip")
+    assert row["selection_validation_sharpe_ratio"] == 1.50
+    assert row["selection_validation_average_weekly_turnover"] == 0.12
+
+
+def test_registry_prefers_best_checkpoint_on_exact_tie(tmp_path: Path) -> None:
+    _write_experiment(
+        tmp_path / "tie",
+        final_sharpe=1.40,
+        best_sharpe=1.40,
+    )
+
+    row = build_experiment_registry(tmp_path, matrix_root=None).iloc[0]
+
+    assert row["selection_checkpoint"] == "best_checkpoint"
+    assert row["selection_model_path"].endswith("tie/best_model.zip")
+    assert row["selection_validation_average_weekly_turnover"] == 0.08
+
+
+def test_registry_uses_total_return_for_final_nav_selection(
+    tmp_path: Path,
+) -> None:
+    _write_experiment(
+        tmp_path / "final_nav",
+        metric_for_best_model="final_nav",
+        final_return=0.25,
+        best_return=0.22,
+    )
+
+    row = build_experiment_registry(tmp_path, matrix_root=None).iloc[0]
+
+    assert row["selection_checkpoint"] == "final_endpoint"
+    assert row["selection_validation_total_return"] == 0.25
+
+
 def test_registry_extracts_env_and_train_config_values(tmp_path: Path) -> None:
     _write_experiment(tmp_path / "config_values")
 
@@ -274,6 +324,11 @@ def _write_experiment(
     seed: int = 42,
     include_best: bool = True,
     git_commit: str | None = "abc123",
+    metric_for_best_model: str = "sharpe_ratio",
+    final_return: float = 0.20,
+    final_sharpe: float = 1.25,
+    best_return: float = 0.22,
+    best_sharpe: float = 1.40,
 ) -> None:
     run_dir.mkdir(parents=True)
     run_id = run_id or run_dir.name
@@ -284,14 +339,14 @@ def _write_experiment(
         encoding="utf-8",
     )
     (run_dir / "train_ppo.yaml").write_text(
-        """
+        f"""
 ppo:
   learning_rate: 0.0003
   ent_coef: 0.01
   n_steps: 2080
   batch_size: 260
 evaluation:
-  metric_for_best_model: sharpe_ratio
+  metric_for_best_model: {metric_for_best_model}
 """.lstrip(),
         encoding="utf-8",
     )
@@ -299,9 +354,9 @@ evaluation:
     _write_json(
         run_dir / "metrics_validation.json",
         {
-            "total_return": 0.20,
+            "total_return": final_return,
             "cagr": 0.18,
-            "sharpe_ratio": 1.25,
+            "sharpe_ratio": final_sharpe,
             "max_drawdown": -0.08,
             "average_weekly_turnover": 0.12,
             "transaction_cost_drag": 0.01,
@@ -347,8 +402,8 @@ evaluation:
         _write_json(
             run_dir / "best_metrics_validation.json",
             {
-                "total_return": 0.22,
-                "sharpe_ratio": 1.40,
+                "total_return": best_return,
+                "sharpe_ratio": best_sharpe,
                 "max_drawdown": -0.06,
                 "average_weekly_turnover": 0.08,
                 "transaction_cost_drag": 0.004,

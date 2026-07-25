@@ -27,7 +27,12 @@ def test_seed_stability_aggregates_configuration_across_seeds(
     registry = _registry(
         [
             _registry_row("run_7", 1.0, total_return=0.10),
-            _registry_row("run_42", 2.0, total_return=0.20),
+            _registry_row(
+                "run_42",
+                2.0,
+                total_return=0.20,
+                checkpoint="final_endpoint",
+            ),
             _registry_row("run_101", 3.0, total_return=0.30),
         ]
     )
@@ -36,7 +41,11 @@ def test_seed_stability_aggregates_configuration_across_seeds(
     row = stability.iloc[0]
 
     assert len(stability) == 1
-    assert row["metric_source"] == "best_checkpoint"
+    assert row["metric_source"] == "best_available_checkpoint"
+    assert json.loads(row["selection_checkpoint_counts"]) == {
+        "best_checkpoint": 2,
+        "final_endpoint": 1,
+    }
     assert row["planned_seed_count"] == 3
     assert row["eligible_seed_count"] == 3
     assert row["ineligible_seed_count"] == 0
@@ -166,7 +175,7 @@ def test_seed_stability_rejects_malformed_inputs(tmp_path: Path) -> None:
         aggregate_seed_stability(mismatched, manifest_path)
 
     unsupported_checkpoint = registry.copy()
-    unsupported_checkpoint.loc[0, "selection_checkpoint"] = "final_endpoint"
+    unsupported_checkpoint.loc[0, "selection_checkpoint"] = "unknown"
     with pytest.raises(ValueError, match="unsupported selection checkpoint"):
         aggregate_seed_stability(unsupported_checkpoint, manifest_path)
 
@@ -213,8 +222,8 @@ def test_seed_stability_writes_csv_markdown_and_cli_outputs(
     assert list(outputs) == ["csv", "markdown"]
     assert pd.read_csv(outputs["csv"]).loc[0, "ranking_ready"]
     assert (
-        "Validation-only best-checkpoint statistics; the test split was not "
-        "accessed."
+        "Validation-only best-available-checkpoint statistics, including the "
+        "final endpoint; the test split was not accessed."
         in markdown
     )
     assert "Ranking ready: 1" in markdown
@@ -247,14 +256,16 @@ def _registry_row(
     eligible: bool = True,
     issues: str = "",
     total_return: float = 0.10,
+    checkpoint: str = "best_checkpoint",
 ) -> dict[str, object]:
+    model_name = "model.zip" if checkpoint == "final_endpoint" else "best_model.zip"
     return {
         "run_id": run_id,
         "experiment_name": experiment_name,
         "selection_eligible": eligible,
         "eligibility_issues": issues,
-        "selection_checkpoint": "best_checkpoint",
-        "selection_model_path": f"artifacts/experiments/{run_id}/best_model.zip",
+        "selection_checkpoint": checkpoint,
+        "selection_model_path": f"artifacts/experiments/{run_id}/{model_name}",
         "selection_validation_sharpe_ratio": sharpe,
         "selection_validation_total_return": total_return,
         "selection_validation_max_drawdown": -0.08,

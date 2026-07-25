@@ -52,7 +52,7 @@ class ValidationCheckpointCallback(BaseCallback):
         return True
 
     def _on_training_end(self) -> None:
-        if self.best_metrics is None:
+        if self._last_eval_timestep != int(self.num_timesteps):
             self._run_validation()
 
     def _run_validation(self) -> None:

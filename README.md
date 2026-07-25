@@ -9,9 +9,9 @@ Phase 2 is complete. The current focus is Phase 3: turning the tested RL
 research environment into a reproducible experimentation, model-selection, and
 robustness workflow. Phase 3 experiment configs and the experiment registry are
 implemented, and persisted experiment matrices support bounded sequential
-execution. Selection-ready registries, best-checkpoint seed aggregation, and
-baseline-gated configuration ranking are implemented. Research sweeps and
-robustness diagnostics are the next steps.
+execution. Selection-ready registries, best-available-checkpoint seed
+aggregation, and baseline-gated configuration ranking are implemented.
+Research sweeps and robustness diagnostics are the next steps.
 
 ## Architecture
 
@@ -92,8 +92,8 @@ test:       2025-01-01 onward
 
 PPO trains on random one-year windows from the train split and is evaluated
 deterministically on validation before final test evaluation.
-Phase 3 model selection ranks each run's best validation checkpoint; final
-training-end metrics remain in the registry for stability diagnostics.
+Phase 3 model selection ranks the best available validation checkpoint,
+including the final training endpoint.
 
 ## Documentation
 

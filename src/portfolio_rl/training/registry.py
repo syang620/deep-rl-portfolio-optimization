@@ -81,6 +81,11 @@ HASHED_ARTIFACTS = {
     "train_config_hash": "train_ppo.yaml",
     "feature_spec_hash": "feature_spec_v1.json",
 }
+SELECTION_METRIC_KEYS = {
+    "sharpe_ratio": "sharpe_ratio",
+    "total_return": "total_return",
+    "final_nav": "total_return",
+}
 
 
 def build_experiment_registry(
@@ -149,6 +154,16 @@ def _experiment_row(
         ]
         if issue is not None
     ]
+    ppo_config = _mapping(train_config.get("ppo"))
+    evaluation_config = _mapping(train_config.get("evaluation"))
+    selection, selection_issue = _selection_artifact(
+        run_dir=run_dir,
+        metrics=metrics,
+        best_metrics=best_metrics,
+        metric_for_best_model=evaluation_config.get("metric_for_best_model"),
+    )
+    if selection_issue is not None:
+        read_issues.append(selection_issue)
     eligibility = _eligibility(
         run_dir,
         manifest,
@@ -158,8 +173,6 @@ def _experiment_row(
         read_issues,
     )
 
-    ppo_config = _mapping(train_config.get("ppo"))
-    evaluation_config = _mapping(train_config.get("evaluation"))
     row = {
         "run_id": run_id,
         "experiment_name": (
@@ -191,21 +204,67 @@ def _experiment_row(
         "best_validation_sharpe_ratio": best_metrics.get("sharpe_ratio"),
         "model_path": _path_if_exists(run_dir / "model.zip"),
         "best_model_path": _path_if_exists(run_dir / "best_model.zip"),
-        "selection_checkpoint": "best_checkpoint",
-        "selection_model_path": _path_if_exists(run_dir / "best_model.zip"),
-        "selection_validation_total_return": best_metrics.get("total_return"),
-        "selection_validation_sharpe_ratio": best_metrics.get("sharpe_ratio"),
-        "selection_validation_max_drawdown": best_metrics.get("max_drawdown"),
-        "selection_validation_average_weekly_turnover": best_metrics.get(
-            "average_weekly_turnover"
-        ),
-        "selection_validation_transaction_cost_drag": best_metrics.get(
-            "transaction_cost_drag"
-        ),
+        **selection,
         "manifest_path": str(manifest_path),
         **eligibility,
     }
     return row
+
+
+def _selection_artifact(
+    *,
+    run_dir: Path,
+    metrics: dict[str, Any],
+    best_metrics: dict[str, Any],
+    metric_for_best_model: Any,
+) -> tuple[dict[str, Any], str | None]:
+    metric_key = (
+        SELECTION_METRIC_KEYS.get(metric_for_best_model)
+        if isinstance(metric_for_best_model, str)
+        else None
+    )
+    issue = None
+    if metric_key is None:
+        issue = "invalid_metric_for_best_model"
+        checkpoint = "best_checkpoint"
+    else:
+        final_score = metrics.get(metric_key)
+        best_score = best_metrics.get(metric_key)
+        checkpoint = (
+            "final_endpoint"
+            if _is_finite_number(final_score)
+            and _is_finite_number(best_score)
+            and float(final_score) > float(best_score)
+            else "best_checkpoint"
+        )
+    selected_metrics = (
+        metrics if checkpoint == "final_endpoint" else best_metrics
+    )
+    model_name = (
+        "model.zip" if checkpoint == "final_endpoint" else "best_model.zip"
+    )
+    return (
+        {
+            "selection_checkpoint": checkpoint,
+            "selection_model_path": _path_if_exists(run_dir / model_name),
+            "selection_validation_total_return": selected_metrics.get(
+                "total_return"
+            ),
+            "selection_validation_sharpe_ratio": selected_metrics.get(
+                "sharpe_ratio"
+            ),
+            "selection_validation_max_drawdown": selected_metrics.get(
+                "max_drawdown"
+            ),
+            "selection_validation_average_weekly_turnover": (
+                selected_metrics.get("average_weekly_turnover")
+            ),
+            "selection_validation_transaction_cost_drag": selected_metrics.get(
+                "transaction_cost_drag"
+            ),
+        },
+        issue,
+    )
 
 
 def _load_matrix_records(

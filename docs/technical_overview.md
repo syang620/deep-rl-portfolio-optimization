@@ -107,8 +107,8 @@ periodically backtests the in-memory model and saves:
 - final `model.zip`,
 - final validation NAV, weights, trades, costs, and metrics.
 
-The best checkpoint is selected by `evaluation.metric_for_best_model`, currently
-`sharpe_ratio`.
+The best available checkpoint, including the final training endpoint, is
+selected by `evaluation.metric_for_best_model`, currently `sharpe_ratio`.
 
 ## Baselines And Reports
 

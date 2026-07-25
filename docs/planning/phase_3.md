@@ -379,8 +379,8 @@ manifest_path
 
 The registry retains `validation_*` metrics for the final training endpoint.
 Model selection uses explicit `selection_validation_*` metrics and
-`selection_model_path`, sourced from `best_metrics_validation.json` and
-`best_model.zip` without falling back to the final endpoint.
+`selection_model_path`, choosing the configured-metric winner between the
+periodic best checkpoint and final training endpoint.
 
 ### 5.4 Model-selection report
 

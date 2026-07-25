@@ -30,7 +30,8 @@ REQUIRED_REGISTRY_COLUMNS = [
     "selection_validation_average_weekly_turnover",
     "selection_validation_transaction_cost_drag",
 ]
-SELECTION_CHECKPOINT = "best_checkpoint"
+SELECTION_CHECKPOINTS = {"best_checkpoint", "final_endpoint"}
+SELECTION_METRIC_SOURCE = "best_available_checkpoint"
 SELECTION_METRIC_COLUMNS = {
     "validation_sharpe_ratio": "selection_validation_sharpe_ratio",
     "validation_total_return": "selection_validation_total_return",
@@ -51,6 +52,7 @@ SEED_STABILITY_COLUMNS = [
     "configuration_id",
     "experiment_name",
     "metric_source",
+    "selection_checkpoint_counts",
     "total_timesteps",
     "overrides",
     "planned_seed_count",
@@ -91,6 +93,7 @@ REQUIRED_STABILITY_COLUMNS = [
     "configuration_id",
     "experiment_name",
     "metric_source",
+    "selection_checkpoint_counts",
     "total_timesteps",
     "overrides",
     "planned_seed_count",
@@ -469,10 +472,15 @@ def _aggregate_configuration(
 
     planned_count = len(runs)
     eligible_count = len(eligible_rows)
+    checkpoint_counts: dict[str, int] = {}
+    for _run, registry_row in eligible_rows:
+        checkpoint = str(registry_row["selection_checkpoint"])
+        checkpoint_counts[checkpoint] = checkpoint_counts.get(checkpoint, 0) + 1
     row = {
         "configuration_id": config_id,
         "experiment_name": experiment_name,
-        "metric_source": SELECTION_CHECKPOINT,
+        "metric_source": SELECTION_METRIC_SOURCE,
+        "selection_checkpoint_counts": _canonical_json(checkpoint_counts),
         "total_timesteps": runs[0]["total_timesteps"],
         "overrides": _canonical_json(runs[0]["overrides"]),
         "planned_seed_count": planned_count,
@@ -544,7 +552,7 @@ def _validate_registry(registry: pd.DataFrame) -> None:
 
 
 def _validate_eligible_metrics(row: pd.Series, run_id: str) -> None:
-    if row["selection_checkpoint"] != SELECTION_CHECKPOINT:
+    if row["selection_checkpoint"] not in SELECTION_CHECKPOINTS:
         raise ValueError(
             f"eligible registry run has unsupported selection checkpoint "
             f"({run_id}): {row['selection_checkpoint']!r}"
@@ -770,6 +778,9 @@ def _selected_configuration(
         "experiment_name": str(candidate["experiment_name"]),
         "configuration_id": str(candidate["configuration_id"]),
         "metric_source": str(candidate["metric_source"]),
+        "selection_checkpoint_counts": json.loads(
+            str(candidate["selection_checkpoint_counts"])
+        ),
         "total_timesteps": int(candidate["total_timesteps"]),
         "overrides": json.loads(str(candidate["overrides"])),
         "planned_seeds": json.loads(str(candidate["planned_seeds"])),
@@ -818,8 +829,8 @@ def _candidate_ranking_markdown(ranked: pd.DataFrame) -> str:
         f"# Candidate Ranking: {experiment_name}",
         "",
         (
-            "Validation-only ranking using best checkpoints; the test split "
-            "was not accessed."
+            "Validation-only ranking using the best available checkpoint, "
+            "including the final endpoint; the test split was not accessed."
         ),
         "",
         f"Configurations: {len(ranked)}",
@@ -855,6 +866,7 @@ def _validation_selection_report(
         "",
         "Selection used validation metrics only. The test split was not accessed.",
         f"Metric source: `{ranked.iloc[0]['metric_source']}`.",
+        "The final training endpoint participates in checkpoint selection.",
         "",
         "## Gate Policy",
         "",
@@ -915,8 +927,8 @@ def _seed_stability_markdown(stability: pd.DataFrame) -> str:
         f"# Seed Stability: {experiment_name}",
         "",
         (
-            "Validation-only best-checkpoint statistics; the test split was "
-            "not accessed."
+            "Validation-only best-available-checkpoint statistics, including "
+            "the final endpoint; the test split was not accessed."
         ),
         "",
         f"Configurations: {len(stability)}",
@@ -929,6 +941,7 @@ def _seed_stability_markdown(stability: pd.DataFrame) -> str:
     visible = [
         "configuration_id",
         "overrides",
+        "selection_checkpoint_counts",
         "planned_seed_count",
         "eligible_seed_count",
         "coverage_ratio",
