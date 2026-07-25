@@ -7,19 +7,26 @@ import hashlib
 import io
 import json
 import subprocess
+import tempfile
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import product
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+import yaml
 
 from portfolio_rl.config.loader import (
     load_data_config,
     load_phase3_experiment_config,
     load_yaml,
 )
-from portfolio_rl.config.schemas import EnvConfig, TrainPPOConfig
+from portfolio_rl.config.schemas import (
+    EnvConfig,
+    Phase3ExperimentConfig,
+    TrainPPOConfig,
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +37,158 @@ class ExperimentRunPlan:
     seed: int
     total_timesteps: int
     overrides: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ExperimentRunResult:
+    """Outcome of executing or safely skipping one planned run."""
+
+    run_id: str
+    status: Literal["completed", "skipped"]
+    model_path: Path
+
+
+def execute_experiment_run(
+    config_path: str | Path,
+    run_id: str,
+    *,
+    root: str | Path = ".",
+    matrix_output_root: str | Path = "artifacts/experiment_matrices",
+    experiment_output_root: str | Path = "artifacts/experiments",
+) -> ExperimentRunResult:
+    """Execute exactly one persisted, validated experiment run."""
+    root_path = Path(root)
+    resolved_config_path = _resolve_path(root_path, config_path)
+    experiment_config = load_phase3_experiment_config(resolved_config_path)
+    matrix_dir = (
+        _resolve_path(root_path, matrix_output_root)
+        / experiment_config.experiment_name
+    )
+    outputs = _matrix_output_paths(matrix_dir)
+    manifest = _read_matrix_manifest(outputs["manifest"])
+    _verify_matrix_manifest(
+        manifest=manifest,
+        experiment_config=experiment_config,
+        config_path=resolved_config_path,
+        root=root_path,
+    )
+
+    plans = expand_experiment_matrix(resolved_config_path, root=root_path)
+    selected_plan = next((plan for plan in plans if plan.run_id == run_id), None)
+    if selected_plan is None:
+        raise ValueError(f"run id is not present in experiment matrix: {run_id}")
+    _verify_manifest_run(manifest, selected_plan)
+
+    data_config_path = _resolve_path(root_path, experiment_config.base_data_config)
+    base_env = load_yaml(
+        _resolve_path(root_path, experiment_config.base_env_config)
+    )
+    base_train = load_yaml(
+        _resolve_path(root_path, experiment_config.base_train_config)
+    )
+    env_config, train_config = _resolve_child_configs(
+        base_env=base_env,
+        base_train=base_train,
+        seed=selected_plan.seed,
+        total_timesteps=selected_plan.total_timesteps,
+        overrides=selected_plan.overrides,
+    )
+    env_yaml = _yaml_text(env_config)
+    train_yaml = _yaml_text(train_config)
+    experiment_dir = (
+        _resolve_path(root_path, experiment_output_root) / selected_plan.run_id
+    )
+    model_path = experiment_dir / "model.zip"
+
+    if experiment_dir.exists():
+        if _completed_run_matches(
+            experiment_dir=experiment_dir,
+            plan=selected_plan,
+            root=root_path,
+            data_config_path=data_config_path,
+            env_yaml=env_yaml,
+            train_yaml=train_yaml,
+        ):
+            _set_run_status(
+                manifest,
+                selected_plan.run_id,
+                status="completed",
+                model_path=_display_path(model_path, root_path),
+                skipped_at=datetime.now(UTC).isoformat(),
+            )
+            _write_matrix_artifacts(manifest, outputs)
+            return ExperimentRunResult(
+                run_id=selected_plan.run_id,
+                status="skipped",
+                model_path=model_path,
+            )
+        raise FileExistsError(
+            "experiment directory exists but is incomplete or conflicts with "
+            f"the persisted plan: {experiment_dir}"
+        )
+
+    _set_run_status(
+        manifest,
+        selected_plan.run_id,
+        status="running",
+        started_at=datetime.now(UTC).isoformat(),
+    )
+    _write_matrix_artifacts(manifest, outputs)
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix=f"{selected_plan.run_id}_"
+        ) as temp_dir:
+            temp_path = Path(temp_dir)
+            env_config_path = temp_path / "env.yaml"
+            train_config_path = temp_path / "train_ppo.yaml"
+            env_config_path.write_text(env_yaml, encoding="utf-8")
+            train_config_path.write_text(train_yaml, encoding="utf-8")
+            trained_model_path = _run_ppo_training(
+                root=root_path,
+                data_config_path=data_config_path,
+                env_config_path=env_config_path,
+                train_config_path=train_config_path,
+                output_dir_override=experiment_dir,
+                run_id=selected_plan.run_id,
+            )
+        complete_bundle = _completed_run_matches(
+            experiment_dir=experiment_dir,
+            plan=selected_plan,
+            root=root_path,
+            data_config_path=data_config_path,
+            env_yaml=env_yaml,
+            train_yaml=train_yaml,
+        )
+        if Path(trained_model_path) != model_path or not complete_bundle:
+            raise RuntimeError(
+                "training did not produce a complete matching artifact bundle: "
+                f"{experiment_dir}"
+            )
+    except Exception as exc:
+        _set_run_status(
+            manifest,
+            selected_plan.run_id,
+            status="failed",
+            failed_at=datetime.now(UTC).isoformat(),
+            error_type=type(exc).__name__,
+            error_message=str(exc),
+        )
+        _write_matrix_artifacts(manifest, outputs)
+        raise
+
+    _set_run_status(
+        manifest,
+        selected_plan.run_id,
+        status="completed",
+        completed_at=datetime.now(UTC).isoformat(),
+        model_path=_display_path(model_path, root_path),
+    )
+    _write_matrix_artifacts(manifest, outputs)
+    return ExperimentRunResult(
+        run_id=selected_plan.run_id,
+        status="completed",
+        model_path=model_path,
+    )
 
 
 def write_experiment_matrix_plan(
@@ -48,11 +207,7 @@ def write_experiment_matrix_plan(
     matrix_dir = (
         _resolve_path(root_path, output_root) / experiment_config.experiment_name
     )
-    outputs = {
-        "manifest": matrix_dir / "experiment_matrix_manifest.json",
-        "runs": matrix_dir / "runs.csv",
-        "summary": matrix_dir / "summary.md",
-    }
+    outputs = _matrix_output_paths(matrix_dir)
     existing_outputs = [path for path in outputs.values() if path.exists()]
     if existing_outputs and not force:
         existing = ", ".join(str(path) for path in existing_outputs)
@@ -80,28 +235,8 @@ def write_experiment_matrix_plan(
         "run_count": len(plans),
         "runs": [_manifest_run(plan) for plan in plans],
     }
-    override_keys = sorted({key for plan in plans for key in plan.overrides})
-
     matrix_dir.mkdir(parents=True, exist_ok=True)
-    outputs["manifest"].write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    outputs["runs"].write_text(
-        _runs_csv(plans, override_keys),
-        encoding="utf-8",
-    )
-    outputs["summary"].write_text(
-        _summary_markdown(
-            experiment_name=experiment_config.experiment_name,
-            generated_at=generated_at,
-            git_commit=git_commit,
-            source_config=_display_path(resolved_config_path, root_path),
-            plans=plans,
-            override_keys=override_keys,
-        ),
-        encoding="utf-8",
-    )
+    _write_matrix_artifacts(manifest, outputs)
     return outputs
 
 
@@ -138,7 +273,7 @@ def expand_experiment_matrix(
         combinations = product(*override_values) if override_values else [()]
         for values in combinations:
             overrides = dict(zip(override_keys, values, strict=True))
-            _validate_child_config(
+            _resolve_child_configs(
                 base_env=base_env,
                 base_train=base_train,
                 seed=seed,
@@ -165,14 +300,14 @@ def expand_experiment_matrix(
     return plans
 
 
-def _validate_child_config(
+def _resolve_child_configs(
     *,
     base_env: dict[str, Any],
     base_train: dict[str, Any],
     seed: int,
     total_timesteps: int,
     overrides: dict[str, Any],
-) -> None:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     env_config = deepcopy(base_env)
     train_config = deepcopy(base_train)
     train_config["seed"] = seed
@@ -188,8 +323,12 @@ def _validate_child_config(
         else:
             _set_existing_path(train_config, path, value)
 
-    EnvConfig.model_validate(env_config)
-    TrainPPOConfig.model_validate(train_config)
+    validated_env = EnvConfig.model_validate(env_config)
+    validated_train = TrainPPOConfig.model_validate(train_config)
+    return (
+        validated_env.model_dump(mode="json"),
+        validated_train.model_dump(mode="json"),
+    )
 
 
 def _set_existing_path(config: dict[str, Any], path: str, value: Any) -> None:
@@ -275,8 +414,155 @@ def _git_commit(root: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def _matrix_output_paths(matrix_dir: Path) -> dict[str, Path]:
+    return {
+        "manifest": matrix_dir / "experiment_matrix_manifest.json",
+        "runs": matrix_dir / "runs.csv",
+        "summary": matrix_dir / "summary.md",
+    }
+
+
+def _read_matrix_manifest(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"persisted experiment matrix manifest not found: {path}"
+        )
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"expected JSON object in matrix manifest: {path}")
+    return loaded
+
+
+def _verify_matrix_manifest(
+    *,
+    manifest: dict[str, Any],
+    experiment_config: Phase3ExperimentConfig,
+    config_path: Path,
+    root: Path,
+) -> None:
+    expected_base_configs = {
+        "data": _config_reference(
+            _resolve_path(root, experiment_config.base_data_config),
+            root,
+        ),
+        "env": _config_reference(
+            _resolve_path(root, experiment_config.base_env_config),
+            root,
+        ),
+        "train": _config_reference(
+            _resolve_path(root, experiment_config.base_train_config),
+            root,
+        ),
+    }
+    expected = {
+        "schema_version": 1,
+        "experiment_name": experiment_config.experiment_name,
+        "git_commit": _git_commit(root),
+        "source_config": _config_reference(config_path, root),
+        "base_configs": expected_base_configs,
+    }
+    mismatches = [
+        key for key, value in expected.items() if manifest.get(key) != value
+    ]
+    if mismatches:
+        raise ValueError(
+            "persisted matrix does not match current code/config inputs: "
+            + ", ".join(mismatches)
+        )
+
+
+def _verify_manifest_run(
+    manifest: dict[str, Any],
+    plan: ExperimentRunPlan,
+) -> None:
+    runs = manifest.get("runs")
+    if not isinstance(runs, list):
+        raise ValueError("matrix manifest runs must be a list")
+    record = next(
+        (
+            candidate
+            for candidate in runs
+            if isinstance(candidate, dict)
+            and candidate.get("run_id") == plan.run_id
+        ),
+        None,
+    )
+    expected = {
+        "run_id": plan.run_id,
+        "seed": plan.seed,
+        "total_timesteps": plan.total_timesteps,
+        "overrides": plan.overrides,
+    }
+    record_mismatch = record is None or any(
+        record.get(key) != value for key, value in expected.items()
+    )
+    if record_mismatch:
+        raise ValueError(
+            f"persisted matrix run does not match current plan: {plan.run_id}"
+        )
+
+
+def _set_run_status(
+    manifest: dict[str, Any],
+    run_id: str,
+    *,
+    status: str,
+    **metadata: Any,
+) -> None:
+    runs = manifest.get("runs")
+    if not isinstance(runs, list):
+        raise ValueError("matrix manifest runs must be a list")
+    for record in runs:
+        if isinstance(record, dict) and record.get("run_id") == run_id:
+            if status == "running":
+                for key in [
+                    "completed_at",
+                    "failed_at",
+                    "skipped_at",
+                    "model_path",
+                    "error_type",
+                    "error_message",
+                ]:
+                    record.pop(key, None)
+            record["status"] = status
+            record.update(metadata)
+            return
+    raise ValueError(f"run id is not present in matrix manifest: {run_id}")
+
+
+def _write_matrix_artifacts(
+    manifest: dict[str, Any],
+    outputs: dict[str, Path],
+) -> None:
+    runs = manifest.get("runs")
+    if not isinstance(runs, list) or not all(
+        isinstance(record, dict) for record in runs
+    ):
+        raise ValueError("matrix manifest runs must contain JSON objects")
+    run_records = list(runs)
+    override_keys = sorted(
+        {
+            key
+            for record in run_records
+            for key in _mapping(record.get("overrides"))
+        }
+    )
+    _write_text_atomic(
+        outputs["manifest"],
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+    )
+    _write_text_atomic(
+        outputs["runs"],
+        _runs_csv(run_records, override_keys),
+    )
+    _write_text_atomic(
+        outputs["summary"],
+        _summary_markdown(manifest, run_records, override_keys),
+    )
+
+
 def _runs_csv(
-    plans: list[ExperimentRunPlan],
+    run_records: list[dict[str, Any]],
     override_keys: list[str],
 ) -> str:
     output = io.StringIO(newline="")
@@ -289,27 +575,24 @@ def _runs_csv(
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
     writer.writeheader()
-    for plan in plans:
+    for record in run_records:
+        overrides = _mapping(record.get("overrides"))
         row = {
-            "run_id": plan.run_id,
-            "seed": plan.seed,
-            "total_timesteps": plan.total_timesteps,
-            "status": "planned",
+            "run_id": record.get("run_id"),
+            "seed": record.get("seed"),
+            "total_timesteps": record.get("total_timesteps"),
+            "status": record.get("status"),
         }
         row.update(
-            {key: _format_value(plan.overrides[key]) for key in override_keys}
+            {key: _format_value(overrides.get(key)) for key in override_keys}
         )
         writer.writerow(row)
     return output.getvalue()
 
 
 def _summary_markdown(
-    *,
-    experiment_name: str,
-    generated_at: str,
-    git_commit: str | None,
-    source_config: str,
-    plans: list[ExperimentRunPlan],
+    manifest: dict[str, Any],
+    run_records: list[dict[str, Any]],
     override_keys: list[str],
 ) -> str:
     headers = [
@@ -319,24 +602,28 @@ def _summary_markdown(
         "status",
         *override_keys,
     ]
+    source_config = _mapping(manifest.get("source_config")).get(
+        "path", "unavailable"
+    )
     lines = [
-        f"# Experiment Matrix: {experiment_name}",
+        f"# Experiment Matrix: {manifest.get('experiment_name')}",
         "",
-        f"- Generated: {generated_at}",
-        f"- Git commit: {git_commit or 'unavailable'}",
+        f"- Generated: {manifest.get('generated_at')}",
+        f"- Git commit: {manifest.get('git_commit') or 'unavailable'}",
         f"- Source config: `{source_config}`",
-        f"- Planned runs: {len(plans)}",
+        f"- Planned runs: {len(run_records)}",
         "",
         "| " + " | ".join(headers) + " |",
         "| " + " | ".join("---" for _ in headers) + " |",
     ]
-    for plan in plans:
+    for record in run_records:
+        overrides = _mapping(record.get("overrides"))
         values = [
-            plan.run_id,
-            str(plan.seed),
-            str(plan.total_timesteps),
-            "planned",
-            *[_format_value(plan.overrides[key]) for key in override_keys],
+            str(record.get("run_id", "")),
+            str(record.get("seed", "")),
+            str(record.get("total_timesteps", "")),
+            str(record.get("status", "")),
+            *[_format_value(overrides.get(key)) for key in override_keys],
         ]
         cells = " | ".join(value.replace("|", "\\|") for value in values)
         lines.append(f"| {cells} |")
@@ -345,6 +632,96 @@ def _summary_markdown(
 
 def _format_value(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _write_text_atomic(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as temp_file:
+            temp_file.write(content)
+            temp_path = Path(temp_file.name)
+        temp_path.replace(path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+
+
+def _yaml_text(config: dict[str, Any]) -> str:
+    return yaml.safe_dump(config, sort_keys=False)
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _completed_run_matches(
+    *,
+    experiment_dir: Path,
+    plan: ExperimentRunPlan,
+    root: Path,
+    data_config_path: Path,
+    env_yaml: str,
+    train_yaml: str,
+) -> bool:
+    required_paths = {
+        "model": experiment_dir / "model.zip",
+        "metrics": experiment_dir / "metrics_validation.json",
+        "manifest": experiment_dir / "manifest.json",
+        "data": experiment_dir / "config.yaml",
+        "env": experiment_dir / "env.yaml",
+        "train": experiment_dir / "train_ppo.yaml",
+        "feature_spec": experiment_dir / "feature_spec_v1.json",
+    }
+    if not all(path.is_file() for path in required_paths.values()):
+        return False
+    try:
+        run_manifest = json.loads(
+            required_paths["manifest"].read_text(encoding="utf-8")
+        )
+    except (json.JSONDecodeError, OSError):
+        return False
+    if not isinstance(run_manifest, dict):
+        return False
+
+    feature_spec_path = root / "artifacts/feature_specs/feature_spec_v1.json"
+    expected = {
+        "run_id": plan.run_id,
+        "git_commit": _git_commit(root),
+        "seed": plan.seed,
+        "total_timesteps": plan.total_timesteps,
+        "data_config_hash": _sha256_file(data_config_path),
+        "env_config_hash": _sha256_text(env_yaml),
+        "train_config_hash": _sha256_text(train_yaml),
+        "feature_spec_hash": _sha256_file(feature_spec_path),
+    }
+    if any(run_manifest.get(key) != value for key, value in expected.items()):
+        return False
+    copied_hashes = {
+        "data_config_hash": _sha256_file(required_paths["data"]),
+        "env_config_hash": _sha256_file(required_paths["env"]),
+        "train_config_hash": _sha256_file(required_paths["train"]),
+        "feature_spec_hash": _sha256_file(required_paths["feature_spec"]),
+    }
+    return all(
+        run_manifest.get(key) == value for key, value in copied_hashes.items()
+    )
+
+
+def _run_ppo_training(**kwargs: Any) -> Path:
+    from portfolio_rl.training.train_ppo import run_ppo_training
+
+    return run_ppo_training(**kwargs)
 
 
 def _resolve_path(root: Path, path: str | Path) -> Path:

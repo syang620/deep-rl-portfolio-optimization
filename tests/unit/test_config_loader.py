@@ -67,13 +67,15 @@ def test_valid_phase3_experiment_configs_load_successfully() -> None:
     assert [config.experiment_name for config in loaded] == [
         "ppo_phase3_default",
         "ppo_phase3_seed_sweep",
+        "ppo_phase3_smoke",
         "ppo_phase3_temperature_sweep",
     ]
     assert loaded[0].base_env_config == Path("configs/env.yaml")
     assert loaded[0].seeds == [42]
     assert loaded[0].overrides == {}
     assert loaded[1].overrides["env.action_temperature"] == [0.5]
-    assert loaded[2].overrides["ppo.ent_coef"] == [0.005, 0.01]
+    assert loaded[2].total_timesteps == 1000
+    assert loaded[3].overrides["ppo.ent_coef"] == [0.005, 0.01]
 
 
 def test_duplicate_tickers_fail(tmp_path: Path) -> None:

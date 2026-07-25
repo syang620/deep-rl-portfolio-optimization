@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import json
 import shutil
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -166,6 +167,7 @@ def run_ppo_training(
         train_config_path=resolved_train_config_path,
         feature_spec_path=resolved_feature_spec_path,
         data_quality_report_path=resolved_data_quality_report_path,
+        git_commit=_git_commit(root_path),
     )
     if wandb_run is not None:
         _log_wandb_metrics(wandb_run, total_timesteps, validation_result.metrics)
@@ -340,10 +342,12 @@ def _write_manifest(
     train_config_path: Path,
     feature_spec_path: Path,
     data_quality_report_path: Path,
+    git_commit: str | None,
 ) -> None:
     manifest = {
         "run_id": run_id,
         "created_at": datetime.now(UTC).isoformat(),
+        "git_commit": git_commit,
         "algorithm": "PPO",
         "feature_version": feature_version,
         "seed": seed,
@@ -370,3 +374,14 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _git_commit(root: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
