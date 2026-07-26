@@ -14,7 +14,6 @@ from portfolio_rl.config.loader import (
     load_universe_config,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "configs"
 
@@ -73,6 +72,7 @@ def test_valid_phase3_experiment_configs_load_successfully() -> None:
     assert [config.experiment_name for config in loaded] == [
         "ppo_phase3_default",
         "ppo_phase3_seed_sweep",
+        "ppo_phase3_seed_sweep_turnover_v2",
         "ppo_phase3_smoke",
         "ppo_phase3_temperature_sweep",
     ]
@@ -80,8 +80,10 @@ def test_valid_phase3_experiment_configs_load_successfully() -> None:
     assert loaded[0].seeds == [42]
     assert loaded[0].overrides == {}
     assert loaded[1].overrides["env.action_temperature"] == [0.5]
-    assert loaded[2].total_timesteps == 1000
-    assert loaded[3].overrides["ppo.ent_coef"] == [0.005, 0.01]
+    assert loaded[2].run_id_prefix == "ppo_phase3_turnover_v2_seed"
+    assert loaded[2].seeds == [7, 42, 101, 202, 999]
+    assert loaded[3].total_timesteps == 1000
+    assert loaded[4].overrides["ppo.ent_coef"] == [0.005, 0.01]
 
 
 def test_duplicate_tickers_fail(tmp_path: Path) -> None:

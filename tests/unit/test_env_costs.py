@@ -25,7 +25,16 @@ def test_full_rebalance_turnover_is_correct() -> None:
         np.array([0.0, 1.0, 0.0]),
     )
 
-    assert turnover == 2.0
+    assert turnover == 1.0
+
+
+def test_partial_rebalance_uses_half_l1_turnover() -> None:
+    turnover = calculate_turnover(
+        np.array([0.50, 0.50]),
+        np.array([0.75, 0.25]),
+    )
+
+    assert turnover == 0.25
 
 
 def test_cost_fraction_bps_conversion() -> None:

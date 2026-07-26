@@ -74,7 +74,7 @@ Current `PortfolioEnv` already implements the core Phase 2 mechanics:
 - temperature-scaled softmax action conversion,
 - forward-return window fetch,
 - EOF-safe truncation,
-- turnover vs current drifted weights,
+- one-way turnover as `0.5 * sum(abs(target - current drifted weights))`,
 - 10 bps transaction cost path,
 - buy-and-hold simulation over the rebalance window,
 - scaled log-growth reward,
@@ -833,9 +833,11 @@ artifacts/
 │
 ├── robustness/
 │   └── {run_id}/
-│       ├── cost_sensitivity.csv
-│       ├── regime_breakdown.csv
-│       ├── seed_stability.csv
+│       ├── transaction_cost_results.csv
+│       ├── transaction_cost_summary.csv
+│       ├── regime_results.csv
+│       ├── regime_summary.csv
+│       ├── robustness_manifest.json
 │       └── robustness_report.md
 │
 └── final_model/
@@ -1162,9 +1164,11 @@ python scripts/select_model.py \
 
 ```bash
 python scripts/run_robustness_checks.py \
-  --selected-model artifacts/model_selection/selected_model.json \
+  --selected-configuration \
+  artifacts/model_selection/ppo_phase3_seed_sweep/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
   --config configs/evaluation.yaml \
-  --output-dir artifacts/robustness
+  --output-dir artifacts/robustness/ppo_phase3_seed_sweep
 ```
 
 ### 12.8 Analyze policy behavior

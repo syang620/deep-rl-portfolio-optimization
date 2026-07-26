@@ -17,7 +17,7 @@ def calculate_turnover(
     if current.shape != target.shape:
         raise ValueError("current_weights and target_weights must have the same shape")
 
-    return float(np.abs(target - current).sum())
+    return float(0.5 * np.abs(target - current).sum())
 
 
 def calculate_transaction_cost_fraction(

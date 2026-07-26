@@ -10,8 +10,15 @@ research environment into a reproducible experimentation, model-selection, and
 robustness workflow. Phase 3 experiment configs and the experiment registry are
 implemented, and persisted experiment matrices support bounded sequential
 execution. Selection-ready registries, best-available-checkpoint seed
-aggregation, and baseline-gated configuration ranking are implemented.
-Research sweeps and robustness diagnostics are the next steps.
+aggregation, baseline-gated configuration ranking, and validation-only
+transaction-cost robustness are implemented. The default five-seed campaign is
+complete, and named 2020, 2022, and 2024 regime robustness is implemented.
+Policy behavior diagnostics are the next Phase 3 step.
+
+Turnover is defined as `0.5 * sum(abs(target - drifted current weights))`.
+The completed five-seed campaign and robustness artifacts predate this
+correction and remain legacy results. The corrected rerun is versioned by
+`configs/experiments/ppo_phase3_seed_sweep_turnover_v2.yaml`.
 
 ## Architecture
 
@@ -61,6 +68,12 @@ python scripts/select_model.py \
   --baseline-root artifacts/backtests/baselines_validation \
   --config configs/evaluation.yaml \
   --output-dir artifacts/model_selection/<experiment>
+python scripts/run_robustness_checks.py \
+  --selected-configuration \
+  artifacts/model_selection/<experiment>/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
+  --config configs/evaluation.yaml \
+  --output-dir artifacts/robustness/<experiment>
 ```
 
 Generated data and experiment outputs are written under `data/` and

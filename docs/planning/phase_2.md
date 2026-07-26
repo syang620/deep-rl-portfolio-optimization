@@ -619,7 +619,7 @@ Function:
 
 ```python
 def calculate_turnover(current_weights: np.ndarray, target_weights: np.ndarray) -> float:
-    return float(np.abs(target_weights - current_weights).sum())
+    return float(0.5 * np.abs(target_weights - current_weights).sum())
 
 
 def calculate_transaction_cost_fraction(turnover: float, transaction_cost_bps: float) -> float:
@@ -945,13 +945,13 @@ Turnover must compare new target weights against drifted current weights, not pr
 Correct:
 
 ```python
-turnover = abs(target_weights - drifted_current_weights).sum()
+turnover = 0.5 * abs(target_weights - drifted_current_weights).sum()
 ```
 
 Incorrect:
 
 ```python
-turnover = abs(target_weights - previous_target_weights).sum()
+turnover = 0.5 * abs(target_weights - previous_target_weights).sum()
 ```
 
 ---
@@ -1380,8 +1380,8 @@ Example:
 ```python
 current = np.array([1.0, 0.0])
 target = np.array([0.0, 1.0])
-turnover = 2.0
-cost at 10 bps = 0.002
+turnover = 1.0
+cost at 10 bps = 0.001
 ```
 
 ### 15.3 Unit tests for `env/drift.py`
@@ -1807,7 +1807,7 @@ turnover and cost are understated after large market moves
 Fix:
 
 ```python
-turnover = abs(new_target_weights - drifted_current_weights).sum()
+turnover = 0.5 * abs(new_target_weights - drifted_current_weights).sum()
 ```
 
 ### Failure mode 4 — Treating log returns as simple returns

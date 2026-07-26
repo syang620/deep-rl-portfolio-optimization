@@ -90,10 +90,13 @@ def test_turnover_uses_drifted_current_weights() -> None:
 
     _, _, _, _, info = env.step(np.ones(2, dtype=np.float32))
 
-    expected_turnover = np.abs(
-        action_to_weights(np.ones(2, dtype=np.float32), temperature=5.0)
-        - drifted_weights
-    ).sum()
+    expected_turnover = (
+        0.5
+        * np.abs(
+            action_to_weights(np.ones(2, dtype=np.float32), temperature=5.0)
+            - drifted_weights
+        ).sum()
+    )
     assert info["turnover"] == pytest.approx(float(expected_turnover))
 
 

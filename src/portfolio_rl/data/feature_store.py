@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import numpy as np
 import pandas as pd
 
@@ -11,7 +13,14 @@ from portfolio_rl.data.dataset import PortfolioDataset
 class PortfolioFeatureStore:
     """Provide split-bounded market features and forward return windows."""
 
-    def __init__(self, dataset: PortfolioDataset, split: str) -> None:
+    def __init__(
+        self,
+        dataset: PortfolioDataset,
+        split: str,
+        *,
+        start_date: str | date | pd.Timestamp | None = None,
+        end_date: str | date | pd.Timestamp | None = None,
+    ) -> None:
         split_name = split.strip()
         if not split_name:
             raise ValueError("split must not be empty")
@@ -19,6 +28,19 @@ class PortfolioFeatureStore:
         mask = dataset.splits == split_name
         if not mask.any():
             raise ValueError(f"dataset does not contain split: {split_name}")
+        start = _date_bound(start_date, "start_date")
+        end = _date_bound(end_date, "end_date")
+        if start is not None and end is not None and start > end:
+            raise ValueError("start_date must be on or before end_date")
+        if start is not None:
+            mask &= dataset.dates >= start
+        if end is not None:
+            mask &= dataset.dates <= end
+        if not mask.any():
+            raise ValueError(
+                "dataset does not contain requested date window for split: "
+                f"{split_name}"
+            )
 
         indices = np.flatnonzero(mask)
         if not np.array_equal(indices, np.arange(indices[0], indices[-1] + 1)):
@@ -124,3 +146,17 @@ class PortfolioFeatureStore:
             raise IndexError(
                 f"relative_idx out of range: {relative_idx}; n_rows={self.n_rows}"
             )
+
+
+def _date_bound(
+    value: str | date | pd.Timestamp | None,
+    name: str,
+) -> pd.Timestamp | None:
+    if value is None:
+        return None
+    timestamp = pd.Timestamp(value)
+    if pd.isna(timestamp):
+        raise ValueError(f"{name} must be a valid date")
+    if timestamp.tzinfo is not None:
+        raise ValueError(f"{name} must be timezone-naive")
+    return timestamp.normalize()

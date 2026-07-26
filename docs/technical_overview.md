@@ -70,7 +70,7 @@ The Gymnasium environment models weekly rebalancing:
 - action space is a normalized vector in `[-1, 1]`,
 - actions are converted to long-only weights with temperature-scaled softmax,
 - weights drift during the five-day holding period,
-- turnover is measured against drifted pre-trade weights,
+- one-way turnover is `0.5 * sum(abs(target - drifted pre-trade weights))`,
 - transaction costs reduce both NAV and the learning reward,
 - observations append live current weights rather than static Phase 1 weights.
 
@@ -109,6 +109,12 @@ periodically backtests the in-memory model and saves:
 
 The best available checkpoint, including the final training endpoint, is
 selected by `evaluation.metric_for_best_model`, currently `sharpe_ratio`.
+After a configuration passes the validation gates, transaction-cost robustness
+replays every selected seed checkpoint on validation at the configured cost
+grid. Raw per-seed results, aggregate sensitivity statistics, input hashes, and
+an explicit no-test-leakage statement are persisted. The same checkpoints are
+also replayed over configured train-era stress windows and the full validation
+window, with in-sample and out-of-sample interpretations labeled separately.
 
 ## Baselines And Reports
 

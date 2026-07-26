@@ -58,6 +58,37 @@ def test_feature_store_filters_split_and_exposes_market_features() -> None:
     assert store.get_market_features(1).tolist() == [11.0, 21.0, 31.0]
 
 
+def test_feature_store_clips_date_window_to_available_split_rows() -> None:
+    store = PortfolioFeatureStore(
+        build_portfolio_dataset(_model_matrix(), _feature_spec()),
+        split="train",
+        start_date="2023-12-30",
+        end_date="2024-01-05",
+    )
+
+    assert store.n_rows == 4
+    assert store.date_at(0) == pd.Timestamp("2024-01-02")
+    assert store.date_at(3) == pd.Timestamp("2024-01-05")
+
+
+def test_feature_store_rejects_invalid_or_empty_date_window() -> None:
+    dataset = build_portfolio_dataset(_model_matrix(), _feature_spec())
+
+    with pytest.raises(ValueError, match="start_date must be"):
+        PortfolioFeatureStore(
+            dataset,
+            split="train",
+            start_date="2024-01-05",
+            end_date="2024-01-02",
+        )
+    with pytest.raises(ValueError, match="does not contain requested date"):
+        PortfolioFeatureStore(
+            dataset,
+            split="train",
+            start_date="2025-01-01",
+        )
+
+
 def test_feature_store_forward_returns_skip_same_row() -> None:
     store = PortfolioFeatureStore(
         build_portfolio_dataset(_model_matrix(), _feature_spec()),
