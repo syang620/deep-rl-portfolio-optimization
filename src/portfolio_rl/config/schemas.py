@@ -433,11 +433,34 @@ class SelectionConfig(StrictConfigModel):
         return value
 
 
+class PolicyBehaviorConfig(StrictConfigModel):
+    dominance_weight_threshold: float = Field(ge=0.0, le=1.0)
+    dominance_date_fraction: float = Field(ge=0.0, le=1.0)
+    active_weight_threshold: float = Field(ge=0.0, le=1.0)
+    concentration_hhi_threshold: float = Field(gt=0.0, le=1.0)
+    turnover_spike_quantile: float = Field(gt=0.0, lt=1.0)
+    high_volatility_quantile: float = Field(gt=0.0, lt=1.0)
+    static_target_change_threshold: float = Field(ge=0.0, le=1.0)
+    lucky_month_positive_return_share: float = Field(ge=0.0, le=1.0)
+    sensitivity_low_quantile: float = Field(gt=0.0, lt=0.5)
+    sensitivity_high_quantile: float = Field(gt=0.5, lt=1.0)
+    sensitivity_material_weight_shift: float = Field(gt=0.0, le=1.0)
+
+
+class StatisticalValidationConfig(StrictConfigModel):
+    bootstrap_iterations: int = Field(gt=0)
+    block_length_trading_days: int = Field(gt=0)
+    confidence_level: float = Field(gt=0.0, lt=1.0)
+    random_seed: int = Field(ge=0)
+
+
 class Phase3EvaluationConfig(StrictConfigModel):
     validation: Phase3ValidationConfig
     final_test: Phase3FinalTestConfig
     robustness: RobustnessConfig
     selection: SelectionConfig
+    policy_behavior: PolicyBehaviorConfig
+    statistical_validation: StatisticalValidationConfig
 
 
 class Phase3ExperimentConfig(StrictConfigModel):
@@ -472,7 +495,9 @@ class Phase3ExperimentConfig(StrictConfigModel):
             if not key.strip():
                 raise ValueError("override keys must not be empty")
             if not isinstance(value, list):
-                raise ValueError("override values must be lists")
+                raise ValueError(  # noqa: TRY004
+                    "override values must be lists"
+                )
             if len(value) == 0:
                 raise ValueError("override value lists must not be empty")
         return values

@@ -13,12 +13,19 @@ execution. Selection-ready registries, best-available-checkpoint seed
 aggregation, baseline-gated configuration ranking, and validation-only
 transaction-cost robustness are implemented. The default five-seed campaign is
 complete, and named 2020, 2022, and 2024 regime robustness is implemented.
-Policy behavior diagnostics are the next Phase 3 step.
+Selected-checkpoint policy behavior diagnostics now cover allocation,
+concentration, turnover, monthly-return dependence, drawdowns, and
+high-volatility response across all five seeds and all three regime windows.
+Counterfactual sensitivity probes distinguish observed high-volatility
+association from direct SPY-volatility and coordinated global-risk responses.
+The selected candidate can now be packaged atomically with its frozen training
+snapshots, validation evidence, provenance hashes, and model card without
+accessing the test split.
 
 Turnover is defined as `0.5 * sum(abs(target - drifted current weights))`.
-The completed five-seed campaign and robustness artifacts predate this
-correction and remain legacy results. The corrected rerun is versioned by
-`configs/experiments/ppo_phase3_seed_sweep_turnover_v2.yaml`.
+The original campaign artifacts remain legacy results. The corrected five-seed
+rerun, model selection, robustness analysis, and policy diagnostics are
+versioned by `configs/experiments/ppo_phase3_seed_sweep_turnover_v2.yaml`.
 
 ## Architecture
 
@@ -74,6 +81,33 @@ python scripts/run_robustness_checks.py \
   --registry artifacts/experiments/registry.csv \
   --config configs/evaluation.yaml \
   --output-dir artifacts/robustness/<experiment>
+python scripts/analyze_policy_behavior.py \
+  --selected-configuration \
+  artifacts/model_selection/<experiment>/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
+  --config configs/evaluation.yaml \
+  --universe-config configs/universe.yaml \
+  --output-dir artifacts/diagnostics/<experiment>
+python scripts/run_policy_sensitivity.py \
+  --selected-configuration \
+  artifacts/model_selection/<experiment>/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
+  --diagnostics-dir artifacts/diagnostics/<experiment> \
+  --config configs/evaluation.yaml \
+  --output-dir artifacts/sensitivity/<experiment>
+python scripts/analyze_active_return.py \
+  --ppo-nav artifacts/diagnostics/<experiment>/nav_by_regime.parquet \
+  --baseline-nav \
+  artifacts/backtests/baselines_validation_turnover_v2/equal_weight_weekly/nav.parquet \
+  --config configs/evaluation.yaml \
+  --output-dir artifacts/statistical_validation/<experiment>
+python scripts/finalize_model.py \
+  --selected-configuration \
+  artifacts/model_selection/<experiment>/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
+  --model-version <model_version> \
+  --representative-seed 42 \
+  --output-root artifacts/final_model
 ```
 
 Generated data and experiment outputs are written under `data/` and
@@ -118,3 +152,5 @@ including the final training endpoint.
   environment, training, and evaluation blueprint.
 - [`docs/planning/phase_3.md`](docs/planning/phase_3.md): active Phase 3
   experimentation, model-selection, and robustness plan.
+- [`notebooks/phase3_policy_behavior_review.ipynb`](notebooks/phase3_policy_behavior_review.ipynb):
+  allocation, exposure, turnover, volatility, and sensitivity visual review.

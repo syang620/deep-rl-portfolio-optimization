@@ -36,3 +36,22 @@ selection:
   equal_weight_drawdown_tolerance: 0.02
   max_median_weekly_turnover: 0.50
   max_median_transaction_cost_drag: 0.025
+
+policy_behavior:
+  dominance_weight_threshold: 0.80
+  dominance_date_fraction: 0.80
+  active_weight_threshold: 0.05
+  concentration_hhi_threshold: 0.25
+  turnover_spike_quantile: 0.95
+  high_volatility_quantile: 0.75
+  static_target_change_threshold: 0.01
+  lucky_month_positive_return_share: 0.50
+  sensitivity_low_quantile: 0.25
+  sensitivity_high_quantile: 0.75
+  sensitivity_material_weight_shift: 0.01
+
+statistical_validation:
+  bootstrap_iterations: 10000
+  block_length_trading_days: 10
+  confidence_level: 0.95
+  random_seed: 42

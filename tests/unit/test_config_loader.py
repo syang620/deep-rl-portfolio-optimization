@@ -63,6 +63,21 @@ def test_valid_phase3_evaluation_config_loads_successfully() -> None:
     assert config.selection.equal_weight_drawdown_tolerance == 0.02
     assert config.selection.max_median_weekly_turnover == 0.50
     assert config.selection.max_median_transaction_cost_drag == 0.025
+    assert config.policy_behavior.dominance_weight_threshold == 0.80
+    assert config.policy_behavior.dominance_date_fraction == 0.80
+    assert config.policy_behavior.active_weight_threshold == 0.05
+    assert config.policy_behavior.concentration_hhi_threshold == 0.25
+    assert config.policy_behavior.turnover_spike_quantile == 0.95
+    assert config.policy_behavior.high_volatility_quantile == 0.75
+    assert config.policy_behavior.static_target_change_threshold == 0.01
+    assert config.policy_behavior.lucky_month_positive_return_share == 0.50
+    assert config.policy_behavior.sensitivity_low_quantile == 0.25
+    assert config.policy_behavior.sensitivity_high_quantile == 0.75
+    assert config.policy_behavior.sensitivity_material_weight_shift == 0.01
+    assert config.statistical_validation.bootstrap_iterations == 10000
+    assert config.statistical_validation.block_length_trading_days == 10
+    assert config.statistical_validation.confidence_level == 0.95
+    assert config.statistical_validation.random_seed == 42
 
 
 def test_valid_phase3_experiment_configs_load_successfully() -> None:

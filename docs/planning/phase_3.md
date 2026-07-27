@@ -4,7 +4,10 @@
 **Phase:** 3 — Experiment management, PPO research campaign, model selection, robustness diagnostics, and final candidate packaging  
 **Audience:** junior engineers, coding-agent operators, project reviewers, and future serving/API implementers  
 **Repo baseline reviewed:** `syang620/deep-rl-portfolio-optimization`, latest observed commit `40cb3a709e4fc678e367bd543df33b208d56f740` (`Complete Phase 2 training workflow`)  
-**Status:** Ready to plan Phase 3 after the current Phase 2 workflow is locally validated with fresh Phase 1 artifacts.
+**Status:** Phase 3 is active. Experiment orchestration, turnover-v2 seed
+stability, validation-only selection, cost/regime robustness, and
+selected-checkpoint policy behavior and counterfactual sensitivity diagnostics
+are implemented.
 
 ---
 
@@ -985,6 +988,10 @@ Acceptance:
 
 ### PR 7 — Policy behavior diagnostics
 
+Status: implemented in `src/portfolio_rl/evaluation/diagnostics.py`,
+`scripts/analyze_policy_behavior.py`, and
+`tests/unit/test_policy_diagnostics.py`.
+
 Files:
 
 ```text
@@ -1003,7 +1010,29 @@ Acceptance:
 - Writes diagnostics_report.md.
 ```
 
-### PR 8 — Final candidate packager
+### PR 8 — Paired active-return bootstrap
+
+Status: implemented in
+`src/portfolio_rl/evaluation/statistical_validation.py`,
+`scripts/analyze_active_return.py`, and
+`tests/unit/test_statistical_validation.py`.
+
+Acceptance:
+
+```text
+- Applies paired circular moving blocks to PPO and equal-weight daily returns.
+- Reports active-return, Sharpe-delta, drawdown-delta, and information-ratio intervals.
+- Preserves the shared market path across all selected policy seeds.
+- Writes reproducible samples, a JSON summary, and a Markdown report.
+- Rejects test-split observations and remains advisory-only.
+```
+
+### PR 9 — Final candidate packager
+
+Before packaging, the selected checkpoints are replayed through deterministic
+SPY-volatility and coordinated global-risk sensitivity probes. These probes use
+train-split quantiles, hold all other observation values fixed, and do not
+access the test split.
 
 Files:
 
@@ -1023,7 +1052,7 @@ Acceptance:
 - Does not run test evaluation.
 ```
 
-### PR 9 — Final test evaluation command wrapper
+### PR 10 — Final test evaluation command wrapper
 
 Files:
 
@@ -1175,20 +1204,53 @@ python scripts/run_robustness_checks.py \
 
 ```bash
 python scripts/analyze_policy_behavior.py \
-  --selected-model artifacts/model_selection/selected_model.json \
-  --output-dir artifacts/diagnostics
+  --selected-configuration \
+  artifacts/model_selection/ppo_phase3_seed_sweep_turnover_v2/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
+  --config configs/evaluation.yaml \
+  --universe-config configs/universe.yaml \
+  --output-dir artifacts/diagnostics/ppo_phase3_seed_sweep_turnover_v2
 ```
 
-### 12.9 Finalize selected model package
+### 12.9 Run counterfactual sensitivity probes
+
+```bash
+python scripts/run_policy_sensitivity.py \
+  --selected-configuration \
+  artifacts/model_selection/ppo_phase3_seed_sweep_turnover_v2/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
+  --diagnostics-dir \
+  artifacts/diagnostics/ppo_phase3_seed_sweep_turnover_v2 \
+  --config configs/evaluation.yaml \
+  --output-dir artifacts/sensitivity/ppo_phase3_seed_sweep_turnover_v2
+```
+
+### 12.10 Analyze paired active-return evidence
+
+```bash
+python scripts/analyze_active_return.py \
+  --ppo-nav \
+  artifacts/diagnostics/ppo_phase3_seed_sweep_turnover_v2/nav_by_regime.parquet \
+  --baseline-nav \
+  artifacts/backtests/baselines_validation_turnover_v2/equal_weight_weekly/nav.parquet \
+  --config configs/evaluation.yaml \
+  --output-dir \
+  artifacts/statistical_validation/ppo_phase3_seed_sweep_turnover_v2
+```
+
+### 12.11 Finalize selected model package
 
 ```bash
 python scripts/finalize_model.py \
-  --selected-model artifacts/model_selection/selected_model.json \
+  --selected-configuration \
+  artifacts/model_selection/ppo_phase3_seed_sweep_turnover_v2/selected_configuration.json \
+  --registry artifacts/experiments/registry.csv \
   --model-version ppo_v1_selected_YYYYMMDD \
+  --representative-seed 42 \
   --output-root artifacts/final_model
 ```
 
-### 12.10 Run final test exactly once
+### 12.12 Run final test exactly once
 
 ```bash
 python scripts/run_final_test.py \
