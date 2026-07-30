@@ -50,6 +50,8 @@ class PortfolioFeatureStore:
         self._dates = dataset.dates[indices]
         self._market_features = dataset.market_features[indices]
         self._returns = dataset.returns[indices]
+        self._full_returns = dataset.returns
+        self._absolute_start_idx = int(indices[0])
         self._asset_order = list(dataset.asset_order)
         self._feature_version = dataset.feature_version
         self._observation_dim = dataset.observation_dim
@@ -123,6 +125,18 @@ class PortfolioFeatureStore:
                 f"relative_idx={relative_idx}, lookback={lookback}"
             )
         return self._returns[start : relative_idx + 1].copy()
+
+    def get_pre_window_log_returns(self, lookback: int) -> np.ndarray:
+        """Return exactly ``lookback`` rows strictly before this store's start."""
+        if lookback <= 0:
+            raise ValueError("lookback must be positive")
+        start = self._absolute_start_idx - lookback
+        if start < 0:
+            raise IndexError(
+                "pre-window return history is insufficient: "
+                f"lookback={lookback}, available={self._absolute_start_idx}"
+            )
+        return self._full_returns[start : self._absolute_start_idx].copy()
 
     def max_valid_start_index(self, episode_length_trading_days: int) -> int:
         """Return the last start index with a full future holding window."""

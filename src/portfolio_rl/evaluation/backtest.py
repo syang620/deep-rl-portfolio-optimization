@@ -16,6 +16,7 @@ from portfolio_rl.env.costs import (
     calculate_turnover,
 )
 from portfolio_rl.env.drift import simulate_buy_and_hold_period
+from portfolio_rl.evaluation.initialization import InitialPortfolioProvider
 from portfolio_rl.evaluation.metrics import calculate_performance_metrics
 from portfolio_rl.policies.baseline_policies import WeightPolicy
 
@@ -53,6 +54,7 @@ def run_weight_policy_backtest(
     initial_nav: float = 1.0,
     max_steps: int | None = None,
     inverse_vol_lookback_trading_days: int = 21,
+    initial_portfolio_provider: InitialPortfolioProvider | None = None,
 ) -> BacktestResult:
     """Run a deterministic target-weight policy through portfolio mechanics."""
     if rebalance_frequency_trading_days <= 0:
@@ -69,7 +71,15 @@ def run_weight_policy_backtest(
         policy.reset()
 
     current_idx = 0
-    current_weights = _equal_weight_vector(feature_store.n_assets)
+    current_weights = (
+        _equal_weight_vector(feature_store.n_assets)
+        if initial_portfolio_provider is None
+        else np.asarray(
+            initial_portfolio_provider.initial_weights(feature_store),
+            dtype=np.float64,
+        )
+    )
+    _validate_initial_weights(current_weights, feature_store.n_assets)
     portfolio_value = float(initial_nav)
     peak_nav = float(initial_nav)
     step_count = 0
@@ -344,3 +354,10 @@ def _validate_target_weights(weights: np.ndarray, n_assets: int) -> None:
         raise ValueError("target_weights values must be nonnegative")
     if not np.isclose(weights.sum(), 1.0):
         raise ValueError("target_weights must sum to one")
+
+
+def _validate_initial_weights(weights: np.ndarray, n_assets: int) -> None:
+    try:
+        _validate_target_weights(weights, n_assets)
+    except ValueError as error:
+        raise ValueError(str(error).replace("target_weights", "initial_weights")) from error

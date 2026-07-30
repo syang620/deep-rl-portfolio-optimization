@@ -20,7 +20,13 @@ Counterfactual sensitivity probes distinguish observed high-volatility
 association from direct SPY-volatility and coordinated global-risk responses.
 The selected candidate can now be packaged atomically with its frozen training
 snapshots, validation evidence, provenance hashes, and model card without
-accessing the test split.
+accessing the test split. The frozen seed-42 initialization-sensitivity
+diagnostic now compares equal-weight, 63-day inverse-volatility, and 100% SHY
+endowments using target and realized pre-trade convergence paths. Phase 3A
+candidate qualification remains open. The 2024 period is consumed
+development/selection data, and Phase 3B is blocked until PM/ML reviewers
+approve a new independent holdout because a legacy Phase 2 model was previously
+evaluated on the repository's 2025+ test designation.
 
 Turnover is defined as `0.5 * sum(abs(target - drifted current weights))`.
 The original campaign artifacts remain legacy results. The corrected five-seed
@@ -108,6 +114,11 @@ python scripts/finalize_model.py \
   --model-version <model_version> \
   --representative-seed 42 \
   --output-root artifacts/final_model
+python scripts/freeze_phase3_campaign.py \
+  --config configs/research/phase3_candidate_qualification.yaml \
+  --output-root artifacts/research_freeze
+python scripts/run_initialization_sensitivity.py \
+  --config configs/research/phase3_initialization_sensitivity.yaml
 ```
 
 Generated data and experiment outputs are written under `data/` and
@@ -133,14 +144,15 @@ The default data split contract is defined in `configs/data.yaml`:
 
 ```text
 train:       2010-01-01 through 2023-12-31
-validation: 2024-01-01 through 2024-12-31
-test:       2025-01-01 onward
+development/selection: 2024-01-01 through 2024-12-31
+legacy test designation: 2025-01-01 onward
 ```
 
-PPO trains on random one-year windows from the train split and is evaluated
-deterministically on validation before final test evaluation.
-Phase 3 model selection ranks the best available validation checkpoint,
-including the final training endpoint.
+PPO trains on random one-year windows from the train split. The 2024 period was
+used for deterministic validation, checkpoint selection, diagnostics, and
+statistical analysis, so it is not independent evidence. The turnover-v2
+campaign has not accessed 2025+, but a different legacy Phase 2 model has.
+Phase 3B therefore remains blocked pending approval of a new holdout.
 
 ## Documentation
 
@@ -152,5 +164,7 @@ including the final training endpoint.
   environment, training, and evaluation blueprint.
 - [`docs/planning/phase_3.md`](docs/planning/phase_3.md): active Phase 3
   experimentation, model-selection, and robustness plan.
+- [`docs/planning/phase_3_remaining_regenerated.md`](docs/planning/phase_3_remaining_regenerated.md):
+  active Phase 3A candidate-qualification and pre-test governance plan.
 - [`notebooks/phase3_policy_behavior_review.ipynb`](notebooks/phase3_policy_behavior_review.ipynb):
   allocation, exposure, turnover, volatility, and sensitivity visual review.

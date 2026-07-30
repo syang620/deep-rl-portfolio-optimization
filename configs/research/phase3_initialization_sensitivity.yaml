@@ -1,0 +1,19 @@
+schema_version: 1
+freeze_dir: artifacts/research_freeze/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926
+seed: 42
+
+requested_split: validation
+evaluation_start_date: "2024-01-01"
+evaluation_end_date: "2024-12-31"
+
+initialization:
+  headline: equal_weight
+  diagnostics:
+    - inverse_volatility_63d
+    - shy_100pct
+  inverse_volatility_lookback_trading_days: 63
+
+convergence:
+  metric: half_l1
+  threshold: 0.05
+  consecutive_decisions: 4

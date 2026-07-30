@@ -7,7 +7,11 @@
 **Status:** Phase 3 is active. Experiment orchestration, turnover-v2 seed
 stability, validation-only selection, cost/regime robustness, and
 selected-checkpoint policy behavior and counterfactual sensitivity diagnostics
-are implemented.
+are implemented. The PR 11 research freeze and seed-42 PR 12 initialization
+sensitivity framework are implemented. The 2024 period is consumed
+development/selection data. A legacy Phase 2 model previously accessed the
+repository's 2025+ test designation, so Phase 3B is blocked until PM/ML
+reviewers approve a new independent holdout.
 
 ---
 
