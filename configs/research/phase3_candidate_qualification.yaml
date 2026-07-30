@@ -1,0 +1,69 @@
+schema_version: 1
+campaign_id: ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926
+experiment_name: ppo_phase3_seed_sweep_turnover_v2
+configuration_id: 5ce122d9a926
+repository_baseline_commit: 7ef06fa82a5a01e265f24c239a5e20f6db194947
+selected_configuration_path: artifacts/model_selection/ppo_phase3_seed_sweep_turnover_v2/selected_configuration.json
+selected_configuration_sha256: 5a181e8a3aedfdde0023568c4d1203009c6976c34dec9d4f22cb37a65dd95362
+registry_path: artifacts/experiments/registry.csv
+registry_sha256: dcbc998d55a3f8b808b81068e56dde262f28db8f5a2b0feb236f4876aed57d0a
+artifact_root: artifacts
+
+development_period:
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+  label: 2024 consumed development/selection period
+
+turnover_contract:
+  version: turnover_v2_one_way_half_l1
+  training_git_commit: d1d61383c955c17b9e40b01149c4f480c7b888b3
+  source_path: src/portfolio_rl/env/costs.py
+  source_sha256: 4e84a06421ab30f84a532f9e86414c6a7ade55c3e4ca315ba50497982aa5e630
+  transaction_cost_bps: 10.0
+
+expected_feature_version: v1
+expected_total_timesteps: 500000
+models:
+  - seed: 7
+    run_id: ppo_phase3_turnover_v2_seed_6b3b59aa3f
+    selection_checkpoint: best_checkpoint
+    model_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_6b3b59aa3f/best_model.zip
+    model_sha256: 6c86c768aba658d52b699984c171823c359dd02f82c52ded77f77e6c9befd684
+    manifest_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_6b3b59aa3f/manifest.json
+    manifest_sha256: abeca50ce166c16369921546ad7528e62cdc77b6407cf205ec0b58fb98a997bd
+  - seed: 42
+    run_id: ppo_phase3_turnover_v2_seed_1cd461ac4d
+    selection_checkpoint: best_checkpoint
+    model_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_1cd461ac4d/best_model.zip
+    model_sha256: df2d95bf9c71ad9c84d095c7b01fb8534af11621b5af23f84b2417f4ddf1ec25
+    manifest_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_1cd461ac4d/manifest.json
+    manifest_sha256: 224c112619bebad121583ae1cae3ca865552cf94079241bc7feb3b47d7c983ae
+  - seed: 101
+    run_id: ppo_phase3_turnover_v2_seed_4d3f5f5e68
+    selection_checkpoint: best_checkpoint
+    model_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_4d3f5f5e68/best_model.zip
+    model_sha256: 3b9cb1b0e0572cb0bf7eae3ef6fd253795e6e32f6ec2e4c64886948e08e2fa45
+    manifest_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_4d3f5f5e68/manifest.json
+    manifest_sha256: bec8281786df790dd631174c76e89ade371f89df2c6c487bb76a18cd15588064
+  - seed: 202
+    run_id: ppo_phase3_turnover_v2_seed_bbce72f059
+    selection_checkpoint: best_checkpoint
+    model_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_bbce72f059/best_model.zip
+    model_sha256: 8bda1de6773e8c988695b758a7b7221d3f8d7cdb1cbd8d37f80fdee064ee5a42
+    manifest_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_bbce72f059/manifest.json
+    manifest_sha256: 83fc7219d92927d642b129a9df9175f5b4e101831b77dc92f9c980df1374e9c1
+  - seed: 999
+    run_id: ppo_phase3_turnover_v2_seed_9745062753
+    selection_checkpoint: best_checkpoint
+    model_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_9745062753/best_model.zip
+    model_sha256: fa3df2569812f66e67c6ea4efe0a350b2cbed676ec78850a7e4ef24b03eb9d75
+    manifest_path: artifacts/experiments/ppo_phase3_turnover_v2_seed_9745062753/manifest.json
+    manifest_sha256: 0197c32c7296464da6d0407d3bc14cebd80e2390524ff79f115a40b8892e8ad7
+
+test_governance:
+  phase3b_policy: block_until_new_independent_holdout_is_approved
+  known_legacy_access:
+    - metadata_path: artifacts/backtests/ppo_test/metadata.json
+      metadata_sha256: 6b2cf45707d3b38c1c882ad1eb93de170522f4d3fce58ee3e97b8467f070aab5
+      model_path: artifacts/experiments/ppo_temp_0_5_500k/model.zip
+      split: test
