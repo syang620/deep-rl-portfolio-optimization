@@ -245,11 +245,18 @@ def format_turnover_overlay_report(
         "",
         "## Execution contract",
         "",
+        "At every decision:",
+        "",
+        "1. Build the observation using the overlay portfolio's live drifted weights.",
+        "2. Ask the candidate policy for a new raw target.",
+        "3. Move alpha of the way from live weights toward that target.",
+        "4. Charge half-L1 turnover against the live weights.",
+        "5. Drift the executed portfolio through the holding period.",
+        "",
         (
-            "At every decision, the wrapped policy receives the overlay "
-            "portfolio's live drifted weights. The raw policy target is saved, "
-            "then the executed target is computed before half-L1 turnover and "
-            "transaction costs. Alpha 1.00 is the exact unmodified policy."
+            "Raw and executed targets are stored separately. Targets are "
+            "recomputed from each overlay path rather than replayed from PR 13. "
+            "Alpha 1.00 is the exact unmodified policy."
         ),
         "",
         "## Interpretation",

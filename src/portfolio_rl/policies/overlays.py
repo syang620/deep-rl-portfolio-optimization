@@ -29,8 +29,8 @@ class PartialRebalancePolicy:
     """Move an alpha fraction from live weights toward a policy target."""
 
     def __init__(self, *, base_policy: WeightPolicy, alpha: float) -> None:
-        if not np.isfinite(alpha) or not 0.0 < alpha <= 1.0:
-            raise ValueError("alpha must be finite and in (0, 1]")
+        if not np.isfinite(alpha) or not 0.0 <= alpha <= 1.0:
+            raise ValueError("alpha must be finite and in [0, 1]")
         self._base_policy = base_policy
         self._alpha = float(alpha)
         self._records: list[PartialRebalanceRecord] = []

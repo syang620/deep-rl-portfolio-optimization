@@ -62,10 +62,37 @@ def test_turnover_overlay_executes_frontier_and_writes_audit(
         result.target_audit["candidate"] == "five_seed_mean_weight_ensemble"
     ]
     for alpha, frame in audit.groupby("alpha"):
+        assert np.isfinite(frame["executed_target"]).all()
+        assert frame["executed_target"].ge(0.0).all()
+        executed_sums = frame.groupby(["date", "decision_step"])[
+            "executed_target"
+        ].sum()
+        np.testing.assert_allclose(executed_sums, 1.0, atol=1e-7, rtol=0.0)
         np.testing.assert_allclose(
             frame["executed_target"],
             frame["current_weight"]
             + alpha * (frame["raw_policy_target"] - frame["current_weight"]),
+            atol=1e-12,
+            rtol=0.0,
+        )
+        calculated_turnover = (
+            0.5
+            * frame.assign(
+                absolute_trade=(
+                    frame["executed_target"] - frame["current_weight"]
+                ).abs()
+            )
+            .groupby(["date", "decision_step"])["absolute_trade"]
+            .sum()
+        )
+        recorded_turnover = (
+            frame.groupby(["date", "decision_step"])[
+                "executed_half_l1_turnover"
+            ].first()
+        )
+        np.testing.assert_allclose(
+            calculated_turnover,
+            recorded_turnover,
             atol=1e-12,
             rtol=0.0,
         )
@@ -116,6 +143,11 @@ def test_turnover_overlay_executes_frontier_and_writes_audit(
         atol=1e-12,
         rtol=0.0,
     )
+    alpha_quarter = audit[np.isclose(audit["alpha"], 0.25)]
+    assert not np.allclose(
+        alpha_quarter["raw_policy_target"],
+        alpha_quarter["executed_target"],
+    )
 
     output = tmp_path / "turnover_overlay"
     outputs = write_turnover_overlay_artifacts(
@@ -132,6 +164,7 @@ def test_turnover_overlay_executes_frontier_and_writes_audit(
     assert "2024 is consumed development/selection data" in report
     assert "No alpha is selected in PR 14" in report
     assert "live drifted weights" in report
+    assert "recomputed from each overlay path" in report
     assert (output / "backtest/equal_weight_weekly/metrics.json").exists()
     assert (
         output

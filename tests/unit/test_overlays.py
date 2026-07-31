@@ -70,6 +70,28 @@ def test_alpha_one_is_exact_identity_for_raw_target() -> None:
     )
 
 
+def test_alpha_zero_preserves_current_weights_and_produces_no_trade() -> None:
+    overlay = PartialRebalancePolicy(
+        base_policy=FixedPolicy([0.9, 0.1]),
+        alpha=0.0,
+    )
+    current = np.array([0.35, 0.65])
+
+    target = overlay.target_weights(
+        np.ones(2),
+        {
+            "asset_order": ["SPY", "SHY"],
+            "current_weights": current,
+        },
+    )
+
+    np.testing.assert_array_equal(target, current)
+    record = overlay.records[0]
+    assert record.raw_policy_target == (0.9, 0.1)
+    assert record.executed_target == (0.35, 0.65)
+    assert record.executed_half_l1_turnover == 0.0
+
+
 def test_reset_clears_records_and_resets_wrapped_policy() -> None:
     base = FixedPolicy([0.6, 0.4])
     overlay = PartialRebalancePolicy(base_policy=base, alpha=0.5)
@@ -85,7 +107,7 @@ def test_reset_clears_records_and_resets_wrapped_policy() -> None:
     assert base.reset_count == 1
 
 
-@pytest.mark.parametrize("alpha", [0.0, -0.1, 1.1, np.nan, np.inf])
+@pytest.mark.parametrize("alpha", [-0.1, 1.1, np.nan, np.inf])
 def test_partial_rebalance_rejects_invalid_alpha(alpha: float) -> None:
     with pytest.raises(ValueError, match="alpha"):
         PartialRebalancePolicy(
