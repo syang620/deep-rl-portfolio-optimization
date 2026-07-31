@@ -6,10 +6,12 @@
 **Repository baseline:** `syang620/deep-rl-portfolio-optimization`
 **Latest reviewed Phase 3 commit:** `7ef06fa82a5a01e265f24c239a5e20f6db194947` — `Complete Phase 3 candidate validation and packaging`
 **Date:** 2026-07-27
-**Status:** Phase 3A remains open. The turnover-v2 campaign has not accessed
-2025+, but a legacy Phase 2 model has. Phase 3B is blocked until the work and
-gates in this document are completed and PM/ML reviewers approve a new
-independent holdout.
+**Status:** Phase 3A remains open. PR 11 through PR 14 are implemented; PR 14
+retains all four predeclared partial-rebalancing alphas for later walk-forward
+analysis rather than selecting from 2024. The turnover-v2 campaign has not
+accessed 2025+, but a legacy Phase 2 model has. Phase 3B is blocked until the
+remaining work and gates in this document are completed and PM/ML reviewers
+approve a new independent holdout.
 
 ---
 
@@ -497,6 +499,11 @@ Report:
 ---
 
 ## PR 14 — Transparent turnover-control overlay
+
+**Implementation status:** Complete. The canonical study evaluates all four
+predeclared alphas for the five-seed ensemble and seed-42 diagnostic, preserves
+raw and executed targets, and does not select an alpha from the consumed 2024
+development period.
 
 ### Goal
 

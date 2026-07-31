@@ -25,11 +25,14 @@ diagnostic now compares equal-weight, 63-day inverse-volatility, and 100% SHY
 endowments using target and realized pre-trade convergence paths. The executable
 five-seed mean-target-weight ensemble now records member recommendations,
 cross-seed disagreement, seed tracking error, and 2022 historical behavior;
-its initialization sensitivity reuses the same framework. Phase 3A candidate
-qualification remains open. The 2024 period is consumed
-development/selection data, and Phase 3B is blocked until PM/ML reviewers
-approve a new independent holdout because a legacy Phase 2 model was previously
-evaluated on the repository's 2025+ test designation.
+its initialization sensitivity reuses the same framework. The PR 14
+partial-rebalancing study evaluates the predeclared 0.25, 0.50, 0.75, and 1.00
+execution fractions for the ensemble, with seed 42 as a secondary diagnostic,
+without selecting an alpha from 2024. Phase 3A candidate qualification remains
+open. The 2024 period is consumed development/selection data, and Phase 3B is
+blocked until PM/ML reviewers approve a new independent holdout because a
+legacy Phase 2 model was previously evaluated on the repository's 2025+ test
+designation.
 
 Turnover is defined as `0.5 * sum(abs(target - drifted current weights))`.
 The original campaign artifacts remain legacy results. The corrected five-seed
@@ -124,6 +127,8 @@ python scripts/run_initialization_sensitivity.py \
   --config configs/research/phase3_initialization_sensitivity.yaml
 python scripts/evaluate_policy_ensemble.py \
   --config configs/research/phase3_ensemble.yaml
+python scripts/run_turnover_overlay_study.py \
+  --config configs/research/phase3_turnover_overlay.yaml
 ```
 
 Generated data and experiment outputs are written under `data/` and
