@@ -6,12 +6,12 @@
 **Repository baseline:** `syang620/deep-rl-portfolio-optimization`
 **Latest reviewed Phase 3 commit:** `7ef06fa82a5a01e265f24c239a5e20f6db194947` — `Complete Phase 3 candidate validation and packaging`
 **Date:** 2026-07-27
-**Status:** Phase 3A remains open. PR 11 through PR 14 are implemented; PR 14
-retains all four predeclared partial-rebalancing alphas for later walk-forward
-analysis rather than selecting from 2024. The turnover-v2 campaign has not
-accessed 2025+, but a legacy Phase 2 model has. Phase 3B is blocked until the
-remaining work and gates in this document are completed and PM/ML reviewers
-approve a new independent holdout.
+**Status:** Phase 3A remains open. PR 11 through PR 15 are implemented; PR 14
+and PR 15 retain all four predeclared partial-rebalancing alphas for later
+walk-forward analysis rather than selecting from 2024. The turnover-v2 campaign
+has not accessed 2025+, but a legacy Phase 2 model has. Phase 3B is blocked
+until the remaining work and gates in this document are completed and PM/ML
+reviewers approve a new independent holdout.
 
 ---
 
@@ -602,6 +602,11 @@ Adding more than one family simultaneously is prohibited because it creates anot
 ---
 
 ## PR 15 — Dynamic-value diagnostics
+
+**Implementation status:** Complete. The frozen ensemble and all four
+partial-rebalancing alphas are compared with a 2023 past-only static portfolio,
+a non-deployable 2024 oracle static portfolio, a one-decision lag, and fixed
+4-, 13-, and 26-decision circular shifts. No alpha is selected from 2024.
 
 ### Goal
 

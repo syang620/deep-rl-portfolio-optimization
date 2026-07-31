@@ -11,9 +11,12 @@ are implemented. The PR 11 research freeze, seed-42 PR 12 initialization
 sensitivity framework, and executable five-seed PR 13 mean-weight ensemble are
 implemented. The PR 14 partial-rebalancing frontier is also implemented for the
 predeclared 0.25, 0.50, 0.75, and 1.00 execution fractions; no alpha is selected
-from 2024. The 2024 period is consumed development/selection data. A legacy
-Phase 2 model previously accessed the repository's 2025+ test designation, so
-Phase 3B is blocked until PM/ML reviewers approve a new independent holdout.
+from 2024. PR 15 dynamic-value controls are implemented for past-only and oracle
+static portfolios, a one-decision lag, and fixed 4-, 13-, and 26-decision
+circular shifts. The 2024 period is consumed development/selection data. A
+legacy Phase 2 model previously accessed the repository's 2025+ test
+designation, so Phase 3B is blocked until PM/ML reviewers approve a new
+independent holdout.
 
 ---
 

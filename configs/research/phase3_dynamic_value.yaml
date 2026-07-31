@@ -1,0 +1,26 @@
+schema_version: 1
+pr14_manifest_path: artifacts/turnover_overlays/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926/overlay_manifest.json
+pr14_manifest_sha256: c400647c04f8ce7ffcd86ce59ff89fda27129c252104ba702724f848b9cb662e
+
+alphas:
+  - 0.25
+  - 0.50
+  - 0.75
+  - 1.00
+
+circular_shift_decisions:
+  - 4
+  - 13
+  - 26
+
+target_basis: executed_target
+
+prior_window:
+  split: train
+  start_date: "2023-01-01"
+  end_date: "2023-12-31"
+
+evaluation_window:
+  split: validation
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
