@@ -22,8 +22,11 @@ The selected candidate can now be packaged atomically with its frozen training
 snapshots, validation evidence, provenance hashes, and model card without
 accessing the test split. The frozen seed-42 initialization-sensitivity
 diagnostic now compares equal-weight, 63-day inverse-volatility, and 100% SHY
-endowments using target and realized pre-trade convergence paths. Phase 3A
-candidate qualification remains open. The 2024 period is consumed
+endowments using target and realized pre-trade convergence paths. The executable
+five-seed mean-target-weight ensemble now records member recommendations,
+cross-seed disagreement, seed tracking error, and 2022 historical behavior;
+its initialization sensitivity reuses the same framework. Phase 3A candidate
+qualification remains open. The 2024 period is consumed
 development/selection data, and Phase 3B is blocked until PM/ML reviewers
 approve a new independent holdout because a legacy Phase 2 model was previously
 evaluated on the repository's 2025+ test designation.
@@ -119,6 +122,8 @@ python scripts/freeze_phase3_campaign.py \
   --output-root artifacts/research_freeze
 python scripts/run_initialization_sensitivity.py \
   --config configs/research/phase3_initialization_sensitivity.yaml
+python scripts/evaluate_policy_ensemble.py \
+  --config configs/research/phase3_ensemble.yaml
 ```
 
 Generated data and experiment outputs are written under `data/` and

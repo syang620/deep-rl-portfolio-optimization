@@ -414,6 +414,8 @@ results.
 
 ### Goal
 
+**Status:** implemented for the frozen five-seed turnover-v2 campaign.
+
 Turn seed dispersion into one tradable policy rather than relying on a median statistic or one representative seed.
 
 ### Files

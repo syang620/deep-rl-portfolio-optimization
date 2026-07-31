@@ -1,0 +1,24 @@
+schema_version: 1
+freeze_dir: artifacts/research_freeze/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926
+member_seeds:
+  - 7
+  - 42
+  - 101
+  - 202
+  - 999
+representative_seed: 42
+
+windows:
+  validation_2024:
+    split: validation
+    start_date: "2024-01-01"
+    end_date: "2024-12-31"
+  historical_2022:
+    split: train
+    start_date: "2022-01-01"
+    end_date: "2022-12-31"
+
+initialization_sensitivity:
+  inverse_volatility_lookback_days: 63
+  convergence_threshold: 0.05
+  consecutive_decisions: 4
