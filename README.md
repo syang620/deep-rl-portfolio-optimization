@@ -46,7 +46,17 @@ positive active return in three of four folds, while the unmodified ensemble did
 so in two of four. The canonical report exposes every alpha by fold, gross and
 net active returns, drawdown differences, cost drag, and alpha-0.25 comparisons
 with equal weight, inverse volatility, momentum, and buy-and-hold. Phase 3A
-candidate qualification remains open pending PR 18.
+candidate qualification now includes PR 18 execution realism and WF4
+root-cause attribution. Under a one-close delay and flat 10 bps, alpha 0.25
+retains positive active return in three of four folds with a +1.21% median;
+the delayed asset-tier joint stress also remains positive on the same gate.
+Flat 25 and 50 bps and ticker-tiered costs are reported without selecting a
+candidate. The 2022-2023 attribution finds that alpha 0.25 sharply reduces
+turnover and improves drawdown versus alpha 1.00, but the past-only 2021 static
+weekly portfolio outperforms its dynamic WF4 path. This supports a strategic
+mix / insufficient-adaptation interpretation rather than claiming that damping
+created return by consistently avoiding noisy overreaction. PR 19 candidate
+selection remains open.
 The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.

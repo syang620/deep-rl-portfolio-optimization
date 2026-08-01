@@ -22,6 +22,14 @@ is implemented in PR 17. All 20 fold/seed selections were frozen before outer
 evaluation; the fold-reset-aware report remains non-selective and carries every
 overlay into PR 18. It reports fold-level active return and Sharpe, drawdown
 differences, gross-versus-net cost effects, and transparent-rule comparisons.
+PR 18 execution stress and 2022-2023 root-cause attribution are implemented.
+Alpha 0.25 passes the one-close-delay gate with positive active return in three
+of four folds and a +1.21% median, and it remains positive under the declared
+delayed asset-tier joint stress. WF4 attribution reports asset contributions,
+class exposures, turnover events, seed disagreement, ensemble stabilization,
+and past-only and oracle static controls. The past-only 2021 static weekly
+portfolio beats the dynamic alpha-0.25 WF4 path, so the evidence is scoped as
+strategic mix / insufficient adaptation; no alpha is selected.
 The 2024 period is consumed development/selection data. A legacy Phase 2 model previously
 accessed the repository's 2025+ test designation, so Phase 3B is blocked until
 PM/ML reviewers approve a new independent holdout.

@@ -1,0 +1,70 @@
+schema_version: 1
+campaign_id: ppo_walk_forward_v1_pr18
+walk_forward_config:
+  path: configs/experiments/ppo_walk_forward.yaml
+  sha256: ce42663d39d03b1ff9b4ac3772781e7816687c2f9a41a668e6be3f57a4cc330c
+pr17_aggregation_manifest:
+  path: artifacts/walk_forward/results/ppo_walk_forward_v1/aggregate/aggregation_manifest.json
+  sha256: 0a01fe97cb35e05cc2f90d6c40c005b9aa992cbacf31259b2c40c17e4162b03a
+pr15_dynamic_value_manifest:
+  path: artifacts/dynamic_value/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926/dynamic_value_manifest.json
+  sha256: dbbdbd6cf125dedec9ba13338041fc403c86b86cdfd3b8590b5ecc9de2545747
+output_roots:
+  execution_stress: artifacts/execution_stress
+  regime_attribution: artifacts/regime_attribution
+
+primary_strategies:
+  - ensemble_alpha_0.25
+  - ensemble_alpha_0.50
+  - ensemble_alpha_1.00
+  - equal_weight_weekly
+  - inverse_volatility
+  - momentum_63d_top3_equal_weight
+context_only_strategies:
+  - ensemble_alpha_0.75
+
+execution_scenarios:
+  delay_only:
+    delay_closes: 1
+    cost_scenario: flat_10_bps
+  cost_only:
+    delay_closes: 0
+    cost_scenarios: [flat_10_bps, flat_25_bps, flat_50_bps, asset_tier]
+  joint:
+    delay_closes: 1
+    cost_scenario: asset_tier
+    strategies: [ensemble_alpha_0.25, equal_weight_weekly]
+
+flat_cost_bps:
+  flat_10_bps: 10.0
+  flat_25_bps: 25.0
+  flat_50_bps: 50.0
+asset_cost_bps:
+  SPY: 5.0
+  QQQ: 5.0
+  IWM: 8.0
+  EFA: 8.0
+  EEM: 12.0
+  TLT: 7.0
+  IEF: 5.0
+  SHY: 3.0
+  LQD: 8.0
+  HYG: 12.0
+  GLD: 8.0
+  DBC: 15.0
+  VNQ: 10.0
+  XLU: 8.0
+
+attribution:
+  fold: WF4
+  strategies: [ensemble_alpha_0.25, ensemble_alpha_0.50, ensemble_alpha_1.00]
+  largest_active_weeks_each_tail: 5
+  largest_target_changes: 5
+  event_window_decisions: 2
+  exposure_groups:
+    equity: [SPY, QQQ, IWM, EFA, EEM, XLU]
+    duration: [TLT, IEF]
+    credit: [LQD, HYG]
+    gold_commodities: [GLD, DBC]
+    real_estate: [VNQ]
+    cash_proxy: [SHY]

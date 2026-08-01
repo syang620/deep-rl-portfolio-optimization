@@ -956,6 +956,15 @@ The primary evidence is repeated directional performance and economic stability,
 
 ## PR 18 — Execution realism and 2022 root-cause analysis
 
+**Implementation status:** Complete. The canonical study evaluates the
+declared delay-only, cost-only, and alpha-0.25 joint stresses across WF1-WF4.
+Alpha 0.25 retains three positive active-return folds and +1.21% median active
+return under the one-close delay. WF4 attribution covers asset and asset-class
+contributions, largest active weeks, policy-defined regime-change windows,
+cross-seed disagreement, ensemble stabilization, and past-only 2021 and
+non-deployable oracle static controls. The result remains non-selective and
+does not access final-test data.
+
 ### Goal
 
 Test whether the candidate survives a minimally realistic implementation model and understand the most unstable historical regime.
@@ -967,8 +976,8 @@ src/portfolio_rl/evaluation/execution_stress.py
 src/portfolio_rl/evaluation/attribution.py
 scripts/run_execution_stress.py
 scripts/analyze_2022_instability.py
-tests/unit/evaluation/test_execution_stress.py
-tests/unit/evaluation/test_attribution.py
+tests/unit/test_execution_stress.py
+tests/unit/test_attribution.py
 ```
 
 ### A. One-close execution delay
