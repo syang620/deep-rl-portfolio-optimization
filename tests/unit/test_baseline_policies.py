@@ -7,6 +7,7 @@ from portfolio_rl.policies.baseline_policies import (
     BuyAndHoldEqualWeightPolicy,
     EqualWeightWeeklyPolicy,
     InverseVolatilityPolicy,
+    MomentumPolicy,
     SingleAssetPolicy,
 )
 
@@ -130,6 +131,30 @@ def test_inverse_volatility_policy_rejects_nonfinite_returns() -> None:
             np.zeros(1),
             {"trailing_log_returns": np.array([[0.0, np.nan]])},
         )
+
+
+def test_momentum_policy_equal_weights_top_three_with_stable_ties() -> None:
+    policy = MomentumPolicy(n_assets=5, top_k=3)
+
+    weights = policy.target_weights(
+        np.zeros(1),
+        {
+            "trailing_log_returns": np.array(
+                [
+                    [0.01, 0.03, -0.01, 0.01, 0.01],
+                    [0.01, 0.02, -0.01, 0.01, 0.01],
+                ]
+            )
+        },
+    )
+
+    _assert_valid_weights(weights)
+    np.testing.assert_allclose(weights, [1 / 3, 1 / 3, 0.0, 1 / 3, 0.0])
+
+
+def test_momentum_policy_rejects_invalid_top_k() -> None:
+    with pytest.raises(ValueError, match="top_k"):
+        MomentumPolicy(n_assets=2, top_k=3)
 
 
 def test_baseline_policies_reject_invalid_asset_counts() -> None:

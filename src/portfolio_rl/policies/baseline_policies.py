@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Protocol
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -115,6 +116,36 @@ class InverseVolatilityPolicy:
         inverse_volatility = 1.0 / np.maximum(volatility, self._volatility_floor)
         weights = inverse_volatility / inverse_volatility.sum()
         return weights.astype(np.float32)
+
+
+class MomentumPolicy:
+    """Equal-weight the top assets by past-only cumulative log return."""
+
+    def __init__(self, n_assets: int, top_k: int = 3) -> None:
+        self._n_assets = _validate_n_assets(n_assets)
+        if top_k <= 0 or top_k > self._n_assets:
+            raise ValueError("top_k must be in [1, n_assets]")
+        self._top_k = int(top_k)
+
+    def target_weights(
+        self,
+        observation: np.ndarray,
+        info: Mapping[str, Any],
+    ) -> np.ndarray:
+        del observation
+        if "trailing_log_returns" not in info:
+            raise ValueError("info must include trailing_log_returns")
+        trailing = np.asarray(info["trailing_log_returns"], dtype=np.float64)
+        _validate_trailing_log_returns(
+            trailing,
+            self._n_assets,
+            "trailing_log_returns",
+        )
+        scores = trailing.sum(axis=0)
+        ranking = np.argsort(-scores, kind="stable")
+        weights = np.zeros(self._n_assets, dtype=np.float32)
+        weights[ranking[: self._top_k]] = 1.0 / self._top_k
+        return weights
 
 
 def _equal_weight_vector(n_assets: int) -> np.ndarray:

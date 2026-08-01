@@ -81,7 +81,11 @@ def test_valid_phase3_evaluation_config_loads_successfully() -> None:
 
 
 def test_valid_phase3_experiment_configs_load_successfully() -> None:
-    config_paths = sorted((CONFIG_DIR / "experiments").glob("*.yaml"))
+    config_paths = sorted(
+        path
+        for path in (CONFIG_DIR / "experiments").glob("*.yaml")
+        if path.name != "ppo_walk_forward.yaml"
+    )
     loaded = [load_phase3_experiment_config(path) for path in config_paths]
 
     assert [config.experiment_name for config in loaded] == [

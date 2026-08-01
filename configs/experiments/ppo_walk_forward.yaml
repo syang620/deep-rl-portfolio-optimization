@@ -1,0 +1,42 @@
+schema_version: 1
+campaign_id: ppo_walk_forward_v1
+walk_forward_data:
+  root: artifacts/walk_forward/data
+  manifest: artifacts/walk_forward/data/walk_forward_manifest.json
+  manifest_sha256: 38e61c52f11df46284cdefa2d96ed535417f0d56261f4d4ab144c15fecefb313
+env_config:
+  path: configs/env.yaml
+  sha256: 76a76df87ca75011cff47a0666d9c03615900382967eba05d2c788777c0b87ef
+train_config:
+  path: configs/train_ppo.yaml
+  sha256: 29cfa3bb972e7c00e52f90687127822b8515ed673e56b6fe3f12793092372b43
+output_root: artifacts/walk_forward/results
+
+folds: [WF1, WF2, WF3, WF4]
+seeds: [7, 42, 101, 202, 999]
+total_timesteps: 500000
+selection:
+  metric: sharpe_ratio
+  direction: maximize
+  tie_break: earliest_step
+  evaluation_frequency_timesteps: 25000
+  include_final_endpoint: true
+
+pilot:
+  fold: WF1
+  seed: 42
+  total_timesteps: 50000
+
+execution:
+  rebalance_frequency_trading_days: 5
+  transaction_cost_bps: 10.0
+  initial_portfolio: equal_weight
+  inverse_volatility_lookback_trading_days: 63
+  momentum_lookback_trading_days: 63
+  momentum_top_k: 3
+  partial_rebalance_alphas: [0.25, 0.50, 0.75, 1.00]
+
+reporting:
+  primary_reference: equal_weight_weekly
+  risk_aware_hurdle: inverse_volatility
+  select_candidate: false

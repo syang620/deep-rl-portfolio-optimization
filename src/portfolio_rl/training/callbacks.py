@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -43,6 +43,8 @@ class ValidationCheckpointCallback(BaseCallback):
         self.output_dir = Path(output_dir)
         self.best_score: float | None = None
         self.best_metrics: dict[str, float | None] | None = None
+        self.best_step: int | None = None
+        self.validation_history: list[dict[str, object]] = []
         self._last_eval_timestep = 0
         self._validation_metrics_callback = validation_metrics_callback
 
@@ -72,11 +74,21 @@ class ValidationCheckpointCallback(BaseCallback):
             result.nav,
             self.metric_for_best_model,
         )
+        improved = is_metric_improvement(score, self.best_score)
+        self.validation_history.append(
+            {
+                "step": self._last_eval_timestep,
+                "score": score,
+                "metrics": dict(result.metrics),
+                "became_best": improved,
+            }
+        )
         if self._validation_metrics_callback is not None:
             self._validation_metrics_callback(self._last_eval_timestep, result.metrics)
-        if is_metric_improvement(score, self.best_score):
+        if improved:
             self.best_score = float(score)
             self.best_metrics = result.metrics
+            self.best_step = self._last_eval_timestep
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self.model.save(self.output_dir / "best_model.zip")
             (self.output_dir / "best_metrics_validation.json").write_text(
