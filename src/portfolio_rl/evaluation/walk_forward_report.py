@@ -275,6 +275,17 @@ def aggregate_walk_forward_results(config: WalkForwardCampaignConfig) -> Path:
         monthly.to_csv(temporary / "monthly_active_returns.csv", index=False)
         summary = _aggregate_summary(fold_metrics)
         summary.to_csv(temporary / "aggregate_metrics.csv", index=False)
+        comparison_by_fold, comparison_summary = _alpha_025_comparisons(
+            fold_metrics
+        )
+        comparison_by_fold.to_csv(
+            temporary / "alpha_025_baseline_comparison_by_fold.csv",
+            index=False,
+        )
+        comparison_summary.to_csv(
+            temporary / "alpha_025_baseline_comparison_summary.csv",
+            index=False,
+        )
         dispersion, improvement = _seed_ensemble_summaries(fold_metrics)
         dispersion.to_csv(temporary / "seed_dispersion.csv", index=False)
         improvement.to_csv(
@@ -313,6 +324,8 @@ def aggregate_walk_forward_results(config: WalkForwardCampaignConfig) -> Path:
             _format_report(
                 fold_metrics,
                 summary,
+                comparison_by_fold,
+                comparison_summary,
                 dispersion,
                 improvement,
                 frontier,
@@ -367,7 +380,7 @@ def _run(
         transaction_cost_bps=config.transaction_cost_bps,
         inverse_vol_lookback_trading_days=(
             config.momentum_lookback
-            if strategy == "momentum_top_3_63d"
+            if strategy == "momentum_63d_top3_equal_weight"
             else config.inverse_vol_lookback
         ),
     )
@@ -380,7 +393,7 @@ def _baseline_factories(store, config):
         PRIMARY_REFERENCE: lambda: EqualWeightWeeklyPolicy(n_assets),
         "buy_and_hold_equal_weight": lambda: BuyAndHoldEqualWeightPolicy(n_assets),
         "inverse_volatility": lambda: InverseVolatilityPolicy(n_assets),
-        "momentum_top_3_63d": lambda: MomentumPolicy(
+        "momentum_63d_top3_equal_weight": lambda: MomentumPolicy(
             n_assets,
             top_k=config.momentum_top_k,
         ),
@@ -390,7 +403,12 @@ def _baseline_factories(store, config):
 
 
 def _fold_metrics(*, fold_id, backtests, categories):
+    gross_returns = {
+        strategy: _same_path_gross_total_return(result)
+        for strategy, result in backtests.items()
+    }
     hurdle = backtests[PRIMARY_REFERENCE].metrics
+    hurdle_gross = gross_returns[PRIMARY_REFERENCE]
     rows = []
     for strategy, result in backtests.items():
         metrics = dict(result.metrics)
@@ -400,6 +418,11 @@ def _fold_metrics(*, fold_id, backtests, categories):
                 "strategy": strategy,
                 "category": categories[strategy],
                 **metrics,
+                "gross_total_return": gross_returns[strategy],
+                "cost_return_impact": metrics["total_return"]
+                - gross_returns[strategy],
+                "active_gross_return_vs_equal_weight": gross_returns[strategy]
+                - hurdle_gross,
                 "active_return_vs_equal_weight": metrics["total_return"]
                 - hurdle["total_return"],
                 "active_sharpe_vs_equal_weight": _difference(
@@ -410,6 +433,17 @@ def _fold_metrics(*, fold_id, backtests, categories):
             }
         )
     return pd.DataFrame(rows)
+
+
+def _same_path_gross_total_return(result: BacktestResult) -> float:
+    net_total_return = float(result.metrics["total_return"])
+    cost_fractions = result.costs["transaction_cost_fraction"].to_numpy(
+        dtype=np.float64
+    )
+    cost_multiplier = float(np.prod(1.0 - cost_fractions))
+    if not np.isfinite(cost_multiplier) or cost_multiplier <= 0.0:
+        raise ValueError("realized transaction-cost multiplier must be positive")
+    return (1.0 + net_total_return) / cost_multiplier - 1.0
 
 
 def _member_targets_frame(ensemble, *, fold_id, asset_order):
@@ -551,6 +585,9 @@ def _aggregate_summary(metrics):
                 "positive_active_sharpe_fold_count": int(
                     (frame["active_sharpe_vs_equal_weight"] > 0.0).sum()
                 ),
+                "improved_drawdown_fold_count": int(
+                    (frame["drawdown_difference_vs_equal_weight"] > 0.0).sum()
+                ),
                 "median_active_return": frame[
                     "active_return_vs_equal_weight"
                 ].median(),
@@ -563,15 +600,87 @@ def _aggregate_summary(metrics):
                 "median_drawdown_difference": frame[
                     "drawdown_difference_vs_equal_weight"
                 ].median(),
+                "worst_fold_drawdown_difference": frame[
+                    "drawdown_difference_vs_equal_weight"
+                ].min(),
                 "median_average_weekly_turnover": frame[
                     "average_weekly_turnover"
                 ].median(),
                 "median_transaction_cost_drag": frame[
                     "transaction_cost_drag"
                 ].median(),
+                "worst_fold_transaction_cost_drag": frame[
+                    "transaction_cost_drag"
+                ].max(),
+                "median_active_gross_return": frame[
+                    "active_gross_return_vs_equal_weight"
+                ].median(),
+                "median_active_net_return": frame[
+                    "active_return_vs_equal_weight"
+                ].median(),
+                "worst_fold_active_gross_return": frame[
+                    "active_gross_return_vs_equal_weight"
+                ].min(),
             }
         )
     return pd.DataFrame(rows)
+
+
+def _alpha_025_comparisons(
+    metrics: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    candidate_name = "ensemble_alpha_0.25"
+    benchmarks = (
+        PRIMARY_REFERENCE,
+        "inverse_volatility",
+        "momentum_63d_top3_equal_weight",
+        "buy_and_hold_equal_weight",
+    )
+    rows = []
+    for fold_id in sorted(metrics["fold_id"].unique()):
+        fold = metrics[metrics["fold_id"] == fold_id].set_index("strategy")
+        candidate = fold.loc[candidate_name]
+        for benchmark_name in benchmarks:
+            benchmark = fold.loc[benchmark_name]
+            rows.append(
+                {
+                    "fold_id": fold_id,
+                    "candidate": candidate_name,
+                    "benchmark": benchmark_name,
+                    "active_net_return": candidate["total_return"]
+                    - benchmark["total_return"],
+                    "active_gross_return": candidate["gross_total_return"]
+                    - benchmark["gross_total_return"],
+                    "active_sharpe": candidate["sharpe_ratio"]
+                    - benchmark["sharpe_ratio"],
+                    "max_drawdown_difference": candidate["max_drawdown"]
+                    - benchmark["max_drawdown"],
+                    "candidate_cost_drag": candidate["transaction_cost_drag"],
+                    "benchmark_cost_drag": benchmark["transaction_cost_drag"],
+                }
+            )
+    by_fold = pd.DataFrame(rows)
+    summary_rows = []
+    for benchmark, frame in by_fold.groupby("benchmark", sort=False):
+        summary_rows.append(
+            {
+                "candidate": candidate_name,
+                "benchmark": benchmark,
+                "positive_active_net_return_fold_count": int(
+                    (frame["active_net_return"] > 0.0).sum()
+                ),
+                "median_active_net_return": frame["active_net_return"].median(),
+                "worst_fold_active_net_return": frame["active_net_return"].min(),
+                "median_active_gross_return": frame[
+                    "active_gross_return"
+                ].median(),
+                "median_active_sharpe": frame["active_sharpe"].median(),
+                "median_max_drawdown_difference": frame[
+                    "max_drawdown_difference"
+                ].median(),
+            }
+        )
+    return by_fold, pd.DataFrame(summary_rows)
 
 
 def _seed_ensemble_summaries(metrics):
@@ -636,7 +745,15 @@ def _overlay_frontier(metrics):
     return overlays
 
 
-def _format_report(fold_metrics, summary, dispersion, improvement, frontier):
+def _format_report(
+    fold_metrics,
+    summary,
+    comparison_by_fold,
+    comparison_summary,
+    dispersion,
+    improvement,
+    frontier,
+):
     lines = [
         "# Nested Walk-Forward Campaign",
         "",
@@ -652,17 +769,20 @@ def _format_report(fold_metrics, summary, dispersion, improvement, frontier):
         "",
         "## Aggregate Evidence",
         "",
-        "| Strategy | Positive folds | Median active return | Median active Sharpe | Worst active return | Drawdown difference | Median turnover | Cost drag |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Strategy | Positive return folds | Median active return | Median active Sharpe | Worst active return | Improved drawdown folds | Median drawdown difference | Worst drawdown difference | Median turnover | Median cost drag | Worst cost drag |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summary.itertuples(index=False):
         lines.append(
             f"| {row.strategy} | {row.positive_active_return_fold_count}/4 | "
             f"{row.median_active_return:.2%} | {row.median_active_sharpe:.3f} | "
             f"{row.worst_fold_active_return:.2%} | "
+            f"{row.improved_drawdown_fold_count}/4 | "
             f"{row.median_drawdown_difference:.2%} | "
+            f"{row.worst_fold_drawdown_difference:.2%} | "
             f"{row.median_average_weekly_turnover:.2%} | "
-            f"{row.median_transaction_cost_drag:.2%} |"
+            f"{row.median_transaction_cost_drag:.2%} | "
+            f"{row.worst_fold_transaction_cost_drag:.2%} |"
         )
     fold_table = fold_metrics[
         fold_metrics["strategy"].isin(
@@ -671,7 +791,7 @@ def _format_report(fold_metrics, summary, dispersion, improvement, frontier):
                 *[f"ensemble_alpha_{alpha:.2f}" for alpha in (0.25, 0.5, 0.75, 1.0)],
                 PRIMARY_REFERENCE,
                 "inverse_volatility",
-                "momentum_top_3_63d",
+                "momentum_63d_top3_equal_weight",
             ]
         )
     ][
@@ -684,6 +804,27 @@ def _format_report(fold_metrics, summary, dispersion, improvement, frontier):
             "drawdown_difference_vs_equal_weight",
             "average_weekly_turnover",
             "transaction_cost_drag",
+            "active_gross_return_vs_equal_weight",
+        ]
+    ]
+    overlay_by_fold = fold_metrics[fold_metrics["category"] == "overlay"][
+        [
+            "fold_id",
+            "strategy",
+            "active_return_vs_equal_weight",
+            "active_gross_return_vs_equal_weight",
+            "active_sharpe_vs_equal_weight",
+            "drawdown_difference_vs_equal_weight",
+            "transaction_cost_drag",
+        ]
+    ]
+    overlay_cost = summary[summary["category"] == "overlay"][
+        [
+            "strategy",
+            "median_transaction_cost_drag",
+            "worst_fold_transaction_cost_drag",
+            "median_active_gross_return",
+            "median_active_net_return",
         ]
     ]
     lines.extend(
@@ -692,6 +833,34 @@ def _format_report(fold_metrics, summary, dispersion, improvement, frontier):
             "## Fold-Level Primary Results",
             "",
             _markdown_table(fold_table),
+            "",
+            "## Overlay Results by Fold",
+            "",
+            _markdown_table(overlay_by_fold),
+            "",
+            (
+                "The failed alpha 0.25 fold can be assessed directly from the "
+                "active return and active Sharpe columns above; no fold is hidden "
+                "by the median."
+            ),
+            "",
+            "## Overlay Cost Diagnostics",
+            "",
+            _markdown_table(overlay_cost),
+            "",
+            (
+                "Gross returns reconstruct the same realized target path before "
+                "costs by removing each recorded multiplicative transaction-cost "
+                "factor. They are not separate counterfactual policy runs."
+            ),
+            "",
+            "## Alpha 0.25 Versus Transparent Rules by Fold",
+            "",
+            _markdown_table(comparison_by_fold),
+            "",
+            "## Alpha 0.25 Versus Transparent Rules — Summary",
+            "",
+            _markdown_table(comparison_summary),
             "",
             "## Seed Dispersion",
             "",
@@ -714,9 +883,15 @@ def _format_report(fold_metrics, summary, dispersion, improvement, frontier):
             ]),
             "",
             (
-                "The outer periods are pseudo-out-of-sample fold evaluations; "
+            "The outer periods are pseudo-out-of-sample fold evaluations; "
                 "2024 remains consumed development/selection data and is not "
                 "used here."
+            ),
+            (
+                "No continuous chained NAV is produced. Every fold begins at NAV "
+                "1.0 from a new equal-weight endowment and uses newly trained, "
+                "fold-specific models. Aggregate evidence is computed from fold-level "
+                "metrics and fold-labeled active-return distributions."
             ),
             "",
         ]
