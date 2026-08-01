@@ -409,7 +409,9 @@ or reverse the performance conclusion
 Before final walk-forward and final-test comparisons, the inverse-volatility
 baseline must use a full past-only lookback across the evaluation-window
 boundary. PR 12 tracks this requirement but does not change frozen baseline
-results.
+results. PR 16 resolves the walk-forward side of this requirement by retaining
+strictly pre-outer-window return context and supplying exactly 63 earlier rows
+at the first outer decision; the frozen PR 12 outputs remain unchanged.
 
 ---
 
@@ -713,7 +715,9 @@ That is still a valid research result, but it changes the project claim.
 from pre-normalization features. Winsorization and scaling are fit on each
 fold's inner-training rows only, and training/selection matrices are physically
 separated from outer-evaluation matrices. No PPO training or checkpoint
-selection occurs in this PR.
+selection occurs in this PR. Each fold records file and logical content hashes,
+realized boundaries and row counts, the full semantic feature contract, and
+strictly past-only context for first-decision trailing-return policies.
 
 ### Goal
 
@@ -773,9 +777,23 @@ artifacts/walk_forward/data/{fold_id}/
 ├── feature_spec.json
 ├── scaler.pkl
 ├── data_quality_report.json
+├── fold_config.json
 ├── fold_manifest.json
 └── split_summary.json
 ```
+
+The canonical matrix has 333 columns: 3 metadata columns, 316 observation
+columns, and 14 unnormalized return columns. The 316-column observation
+dimension remains unchanged across folds even though each fold has different
+fitted scaler values.
+
+Historical feature construction may use only past observations before an outer
+decision, including feature warm-up rows before the outer start. Scaler fitting
+uses inner-training rows only; PPO training and checkpoint selection cannot
+access outer rows; outer rewards use only outer rows and remain bounded at the
+outer end. Each fold also retains at least 63 return rows strictly before the
+outer start for inverse-volatility initialization, the inverse-volatility
+baseline, and other trailing-return policies.
 
 ### Required tests
 

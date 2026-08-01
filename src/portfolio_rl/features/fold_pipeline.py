@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -62,9 +62,10 @@ def build_walk_forward_artifacts(
     )
     try:
         fold_manifest_hashes = {}
+        fold_artifact_hashes = {}
         for fold in config.folds:
             fold_dir = temporary / fold.fold_id
-            _build_fold(
+            fold_manifest = _build_fold(
                 fold=fold,
                 fold_dir=fold_dir,
                 config=config,
@@ -73,11 +74,15 @@ def build_walk_forward_artifacts(
             fold_manifest_hashes[fold.fold_id] = _sha256(
                 fold_dir / "fold_manifest.json"
             )
+            fold_artifact_hashes[fold.fold_id] = fold_manifest[
+                "artifact_hashes"
+            ]
         campaign = {
             "schema_version": 1,
             "study": "walk_forward_data_artifacts",
             "fold_order": [fold.fold_id for fold in config.folds],
             "fold_manifest_sha256": fold_manifest_hashes,
+            "fold_artifact_hashes": fold_artifact_hashes,
             "checkpoint_selection_performed": False,
             "ppo_training_performed": False,
             "latest_outer_evaluation_end": "2023-12-31",
@@ -104,7 +109,7 @@ def _build_fold(
     fold_dir: Path,
     config: WalkForwardConfig,
     sources: dict[str, Any],
-) -> None:
+) -> dict[str, Any]:
     fold_dir.mkdir(parents=True)
     asset = assign_fold_splits(sources["asset_features"], fold)
     global_frame = assign_fold_splits(sources["global_features"], fold)
@@ -158,6 +163,7 @@ def _build_fold(
         "scaler": fold_dir / "scaler.pkl",
         "quality": fold_dir / "data_quality_report.json",
         "summary": fold_dir / "split_summary.json",
+        "fold_config": fold_dir / "fold_config.json",
     }
     model_matrix.to_parquet(paths["model_matrix"], index=False)
     training_view.to_parquet(paths["training_selection_matrix"], index=False)
@@ -172,6 +178,8 @@ def _build_fold(
     )
     split_summary = _split_summary(model_matrix, asset)
     _write_json(paths["summary"], split_summary)
+    fold_config = {"fold_id": fold.fold_id, "periods": _fold_periods(fold)}
+    _write_json(paths["fold_config"], fold_config)
     quality = _quality_report(
         fold=fold,
         model_matrix=model_matrix,
@@ -182,15 +190,39 @@ def _build_fold(
         feature_spec=feature_spec,
     )
     _write_json(paths["quality"], quality)
+    logical_values = {
+        "model_matrix": _logical_frame_sha256(model_matrix),
+        "training_selection_matrix": _logical_frame_sha256(training_view),
+        "outer_evaluation_matrix": _logical_frame_sha256(outer_view),
+        "feature_spec": _logical_json_sha256(asdict(feature_spec)),
+        "scaler": _logical_json_sha256(
+            asdict(
+                NormalizationArtifactBundle(
+                    asset_features=asset_scaler,
+                    global_features=global_scaler,
+                )
+            )
+        ),
+        "quality": _logical_json_sha256(quality),
+        "summary": _logical_json_sha256(split_summary),
+        "fold_config": _logical_json_sha256(fold_config),
+    }
     artifact_hashes = {
-        name: {"path": path.name, "sha256": _sha256(path)}
+        name: {
+            "path": path.name,
+            "file_sha256": _sha256(path),
+            "logical_sha256": logical_values[name],
+        }
         for name, path in paths.items()
     }
+    boundaries = _realized_boundaries(split_summary)
+    _validate_realized_boundaries(boundaries)
     manifest = {
         "schema_version": 1,
         "fold_id": fold.fold_id,
         "periods": _fold_periods(fold),
         "realized_splits": split_summary,
+        **boundaries,
         "source_artifacts": {
             name: {
                 "path": config.source_paths[name],
@@ -219,6 +251,7 @@ def _build_fold(
                 "training_selection_matrix"
             ].name,
             "outer_evaluation_input": paths["outer_evaluation_matrix"].name,
+            "outer_evaluation_context_input": paths["model_matrix"].name,
             "checkpoint_selection_performed": False,
             "outer_accessed_during_training_or_selection": False,
         },
@@ -227,10 +260,40 @@ def _build_fold(
             == config.source_hashes["feature_spec"]
         ),
         "model_matrix_column_order": list(model_matrix.columns),
+        "feature_contract": {
+            "asset_order": feature_spec.asset_order,
+            "per_asset_feature_order": feature_spec.per_asset_features,
+            "global_feature_order": feature_spec.global_features,
+            "current_weight_order": feature_spec.current_weight_features,
+            "observation_dimension": feature_spec.observation_dim,
+            "return_column_order": [
+                f"return_{ticker.lower()}_1d"
+                for ticker in feature_spec.asset_order
+            ],
+        },
+        "matrix_width_breakdown": {
+            "metadata_columns": 3,
+            "observation_columns": feature_spec.observation_dim,
+            "return_columns": len(feature_spec.asset_order),
+            "total_columns": len(model_matrix.columns),
+        },
+        "historical_context_contract": {
+            "feature_computation_may_use_past_rows_before_outer_start": True,
+            "scaler_fit_rows": "inner_train_only",
+            "ppo_training_and_checkpoint_selection_outer_rows": "prohibited",
+            "outer_reward_rows": "outer_evaluation_only",
+            "outer_reward_bounded_at_outer_end": True,
+            "pre_window_context_strictly_before_outer_start": True,
+            "pre_window_context_rows_available": int(
+                (model_matrix["split"] != "outer_evaluation").sum()
+            ),
+            "minimum_required_trailing_return_rows": 63,
+        },
         "contains_2024_or_later": False,
         "artifact_hashes": artifact_hashes,
     }
     _write_json(fold_dir / "fold_manifest.json", manifest)
+    return manifest
 
 
 def _load_and_verify_sources(
@@ -309,6 +372,12 @@ def _quality_report(**kwargs: Any) -> dict[str, Any]:
         "feature_order_matches_spec": True,
         "return_columns_use_unnormalized_same_date_ret_1d": True,
         "outer_forward_boundary_enforced": boundary_enforced,
+        "matrix_width_breakdown": {
+            "metadata_columns": 3,
+            "observation_columns": feature_spec.observation_dim,
+            "return_columns": len(feature_spec.asset_order),
+            "total_columns": len(matrix.columns),
+        },
         "contains_2024_or_later": False,
     }
 
@@ -338,6 +407,78 @@ def _fold_periods(fold: WalkForwardFold) -> dict[str, dict[str, str]]:
             ("outer_evaluation", fold.outer_evaluation),
         )
     }
+
+
+def _realized_boundaries(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "inner_train_start": summary["inner_train"]["start_date"],
+        "inner_train_end": summary["inner_train"]["end_date"],
+        "inner_validation_start": summary["inner_validation"]["start_date"],
+        "inner_validation_end": summary["inner_validation"]["end_date"],
+        "outer_evaluation_start": summary["outer_evaluation"]["start_date"],
+        "outer_evaluation_end": summary["outer_evaluation"]["end_date"],
+        "inner_train_rows": summary["inner_train"]["model_matrix_rows"],
+        "inner_validation_rows": summary["inner_validation"]["model_matrix_rows"],
+        "outer_evaluation_rows": summary["outer_evaluation"]["model_matrix_rows"],
+    }
+
+
+def _validate_realized_boundaries(boundaries: dict[str, Any]) -> None:
+    train_end = pd.Timestamp(boundaries["inner_train_end"])
+    validation_start = pd.Timestamp(boundaries["inner_validation_start"])
+    validation_end = pd.Timestamp(boundaries["inner_validation_end"])
+    outer_start = pd.Timestamp(boundaries["outer_evaluation_start"])
+    outer_end = pd.Timestamp(boundaries["outer_evaluation_end"])
+    if not train_end < validation_start:
+        raise ValueError("realized inner train overlaps inner validation")
+    if not validation_end < outer_start:
+        raise ValueError("realized inner validation overlaps outer evaluation")
+    if outer_end > pd.Timestamp("2023-12-31"):
+        raise ValueError("realized outer evaluation extends beyond 2023")
+
+
+def _logical_frame_sha256(frame: pd.DataFrame) -> str:
+    """Hash ordered schema and date-sorted logical values, independent of Parquet."""
+    ordered = frame.sort_values("date", kind="stable").reset_index(drop=True).copy()
+    ordered["date"] = pd.to_datetime(ordered["date"]).dt.strftime(
+        "%Y-%m-%dT%H:%M:%S.%f"
+    )
+    schema = [
+        {
+            "name": str(column),
+            "logical_type": (
+                "number"
+                if pd.api.types.is_numeric_dtype(frame[column])
+                else "datetime"
+                if pd.api.types.is_datetime64_any_dtype(frame[column])
+                else "string"
+            ),
+        }
+        for column in frame.columns
+    ]
+    digest = hashlib.sha256()
+    digest.update(
+        json.dumps(schema, separators=(",", ":"), ensure_ascii=True).encode()
+    )
+    digest.update(b"\n")
+    digest.update(
+        ordered.to_csv(
+            index=False,
+            float_format="%.17g",
+            lineterminator="\n",
+        ).encode("utf-8")
+    )
+    return digest.hexdigest()
+
+
+def _logical_json_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _write_json(path: Path, value: Any) -> None:

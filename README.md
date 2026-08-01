@@ -34,10 +34,14 @@ portfolios, a one-decision lag, and fixed circular shifts. These diagnostics
 also remain non-selective. The PR 16 nested walk-forward artifact builder now
 creates four fold-specific, inner-train-fitted scaler and model-matrix bundles
 with physically isolated training/selection and outer-evaluation views; it does
-not train PPO. Phase 3A candidate qualification remains open. The 2024 period
-is consumed development/selection data, and Phase 3B is blocked until PM/ML
-reviewers approve a new independent holdout because a legacy Phase 2 model was
-previously evaluated on the repository's 2025+ test designation.
+not train PPO. Fold manifests record file and logical content hashes, exact
+boundaries and row counts, the canonical feature contract, and the 3 metadata +
+316 observation + 14 return = 333 column layout. Past-only return context is
+retained for first-decision trailing policies without exposing outer reward rows
+to training or selection. Phase 3A candidate qualification remains open. The
+2024 period is consumed development/selection data, and Phase 3B is blocked
+until PM/ML reviewers approve a new independent holdout because a legacy Phase
+2 model was previously evaluated on the repository's 2025+ test designation.
 
 Turnover is defined as `0.5 * sum(abs(target - drifted current weights))`.
 The original campaign artifacts remain legacy results. The corrected five-seed

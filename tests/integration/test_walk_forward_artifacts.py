@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -14,7 +16,24 @@ from portfolio_rl.data.walk_forward import (
     load_outer_evaluation_dataset,
     load_training_selection_dataset,
 )
+from portfolio_rl.evaluation.backtest import run_weight_policy_backtest
 from portfolio_rl.features.fold_pipeline import build_walk_forward_artifacts
+
+
+class CapturingEqualWeightPolicy:
+    def __init__(self) -> None:
+        self.trailing_returns: list[np.ndarray] = []
+
+    def target_weights(
+        self,
+        observation: np.ndarray,
+        info: Mapping[str, Any],
+    ) -> np.ndarray:
+        del observation
+        self.trailing_returns.append(
+            np.asarray(info["trailing_log_returns"]).copy()
+        )
+        return np.array([0.5, 0.5])
 
 
 def test_walk_forward_artifacts_are_isolated_and_reproducible(
@@ -47,16 +66,57 @@ def test_walk_forward_artifacts_are_isolated_and_reproducible(
             "outer_accessed_during_training_or_selection"
         ] is False
         assert first_manifest["artifact_hashes"] == second_manifest["artifact_hashes"]
+        assert first_campaign["fold_artifact_hashes"][fold_id] == first_manifest[
+            "artifact_hashes"
+        ]
+        for artifact in first_manifest["artifact_hashes"].values():
+            assert len(artifact["file_sha256"]) == 64
+            assert len(artifact["logical_sha256"]) == 64
+        assert first_manifest["inner_train_end"] < first_manifest[
+            "inner_validation_start"
+        ]
+        assert first_manifest["inner_validation_end"] < first_manifest[
+            "outer_evaluation_start"
+        ]
+        assert first_manifest["outer_evaluation_end"] <= "2023-12-31"
+        assert first_manifest["matrix_width_breakdown"] == {
+            "metadata_columns": 3,
+            "observation_columns": 5,
+            "return_columns": 2,
+            "total_columns": 10,
+        }
+        assert first_manifest["feature_contract"] == {
+            "asset_order": ["SPY", "SHY"],
+            "per_asset_feature_order": ["ret_1d"],
+            "global_feature_order": ["global_signal"],
+            "current_weight_order": ["weight_spy", "weight_shy"],
+            "observation_dimension": 5,
+            "return_column_order": ["return_spy_1d", "return_shy_1d"],
+        }
         assert (first_dir / "feature_spec.json").read_bytes() == (
             tmp_path / "feature_spec.json"
         ).read_bytes()
 
         training = load_training_selection_dataset(first_dir)
-        outer = load_outer_evaluation_dataset(first_dir)
+        outer_with_context = load_outer_evaluation_dataset(first_dir)
         assert set(training.splits) == {"inner_train", "inner_validation"}
-        assert set(outer.splits) == {"outer_evaluation"}
-        assert outer.dates.max() < pd.Timestamp("2024-01-01")
-        store = PortfolioFeatureStore(outer, "outer_evaluation")
+        assert set(outer_with_context.splits) == {
+            "inner_train",
+            "inner_validation",
+            "outer_evaluation",
+        }
+        assert outer_with_context.dates.max() < pd.Timestamp("2024-01-01")
+        store = PortfolioFeatureStore(outer_with_context, "outer_evaluation")
+        expected_context = store.get_pre_window_log_returns(63)
+        policy = CapturingEqualWeightPolicy()
+        run_weight_policy_backtest(
+            feature_store=store,
+            policy=policy,
+            strategy="capture",
+            max_steps=1,
+            inverse_vol_lookback_trading_days=63,
+        )
+        np.testing.assert_array_equal(policy.trailing_returns[0], expected_context)
         with pytest.raises(IndexError, match="split boundary"):
             store.get_forward_log_returns(store.n_rows - 1, 1)
 

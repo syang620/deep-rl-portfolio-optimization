@@ -295,8 +295,28 @@ def _get_available_trailing_log_returns(
     relative_idx: int,
     lookback: int,
 ) -> np.ndarray:
-    available_lookback = min(lookback, relative_idx + 1)
-    return feature_store.get_trailing_log_returns(relative_idx, available_lookback)
+    within_window_rows = min(relative_idx, lookback)
+    pre_window_rows = lookback - within_window_rows
+    frames = []
+    try:
+        if pre_window_rows:
+            frames.append(
+                feature_store.get_pre_window_log_returns(pre_window_rows)
+            )
+        if within_window_rows:
+            frames.append(
+                feature_store.get_trailing_log_returns(
+                    relative_idx - 1,
+                    within_window_rows,
+                )
+            )
+    except IndexError:
+        available_lookback = min(lookback, relative_idx + 1)
+        return feature_store.get_trailing_log_returns(
+            relative_idx,
+            available_lookback,
+        )
+    return np.vstack(frames)
 
 
 def _build_backtest_report(result: BacktestResult) -> str:

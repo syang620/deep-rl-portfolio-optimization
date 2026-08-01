@@ -15,7 +15,10 @@ from 2024. PR 15 dynamic-value controls are implemented for past-only and oracle
 static portfolios, a one-decision lag, and fixed 4-, 13-, and 26-decision
 circular shifts. PR 16 fold-specific walk-forward data artifacts are implemented
 with inner-training-only normalization and separate training/selection and
-outer-evaluation matrices; PPO training remains deferred to PR 17. The 2024
+outer-evaluation matrices. Their manifests record physical and logical hashes,
+realized split boundaries and row counts, the canonical feature contract, and
+strictly past-only context for 63-day trailing-return policies; PPO training
+remains deferred to PR 17. The 2024
 period is consumed development/selection data. A legacy Phase 2 model previously
 accessed the repository's 2025+ test designation, so Phase 3B is blocked until
 PM/ML reviewers approve a new independent holdout.

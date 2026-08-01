@@ -138,15 +138,19 @@ def load_training_selection_dataset(fold_dir: str | Path) -> PortfolioDataset:
 
 
 def load_outer_evaluation_dataset(fold_dir: str | Path) -> PortfolioDataset:
-    """Explicitly load the physically isolated outer-evaluation view."""
+    """Load outer evaluation with strictly earlier return context retained."""
     root = Path(fold_dir)
     dataset = load_portfolio_dataset(
         root,
-        model_matrix_path="outer_evaluation_matrix_daily.parquet",
+        model_matrix_path="model_matrix_daily.parquet",
         feature_spec_path="feature_spec.json",
     )
-    if set(dataset.splits) != {"outer_evaluation"}:
-        raise ValueError("outer-evaluation view contains unexpected splits")
+    if set(dataset.splits) != {
+        "inner_train",
+        "inner_validation",
+        "outer_evaluation",
+    }:
+        raise ValueError("outer-evaluation context dataset has unexpected splits")
     return dataset
 
 
