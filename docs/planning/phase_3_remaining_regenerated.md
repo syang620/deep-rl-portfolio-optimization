@@ -819,6 +819,13 @@ test_fold_artifact_hashes_are_stable
 
 ## PR 17 — Walk-forward training, baselines, ensemble, and aggregation
 
+**Implementation status:** Complete. The WF1–WF4 campaign trained seeds 7, 42,
+101, 202, and 999 with one common PPO configuration. Each selected checkpoint
+was frozen from inner-validation evidence before its outer matrix was loaded.
+The outer report evaluates the fold-specific five-seed ensemble, all four
+partial-rebalance overlays, and the declared baselines from equal weight. No
+candidate is selected; PR 18 remains required.
+
 ### Goal
 
 Test whether the candidate family repeats across genuinely unseen historical periods.

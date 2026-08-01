@@ -38,8 +38,13 @@ not train PPO. Fold manifests record file and logical content hashes, exact
 boundaries and row counts, the canonical feature contract, and the 3 metadata +
 316 observation + 14 return = 333 column layout. Past-only return context is
 retained for first-decision trailing policies without exposing outer reward rows
-to training or selection. Phase 3A candidate qualification remains open. The
-2024 period is consumed development/selection data, and Phase 3B is blocked
+to training or selection. The PR 17 campaign has now trained and selected five
+fold-specific PPO seeds for each of four nested folds, evaluated only after
+selection freezes were written, and reported ensembles, partial-rebalance
+overlays, and frozen baselines. No candidate is selected: alpha 0.25 produced
+positive active return in three of four folds, while the unmodified ensemble did
+so in two of four. Phase 3A candidate qualification remains open pending PR 18.
+The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.
 
@@ -142,6 +147,10 @@ python scripts/run_dynamic_value_checks.py \
   --config configs/research/phase3_dynamic_value.yaml
 python scripts/build_walk_forward_artifacts.py \
   --config configs/walk_forward.yaml
+python scripts/run_walk_forward_campaign.py --stage pilot
+python scripts/run_walk_forward_campaign.py --stage selection
+python scripts/run_walk_forward_campaign.py --stage evaluation
+python scripts/aggregate_walk_forward.py
 ```
 
 Generated data and experiment outputs are written under `data/` and
