@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -187,6 +188,7 @@ def evaluate_frozen_selection(
             "turnover_convention": "half_l1",
             "candidate_selected": False,
             "dynamic_value_diagnostics_run": False,
+            "evaluation_git_commit": _git_commit(config.config_path.parent),
             "completed_at": datetime.now(UTC).isoformat(),
         }
         (temporary / "fold_evaluation_manifest.json").write_text(
@@ -300,6 +302,7 @@ def aggregate_walk_forward_results(config: WalkForwardCampaignConfig) -> Path:
             "concatenated_live_portfolio_claimed": False,
             "candidate_selected": False,
             "pr18_required_before_selection": True,
+            "aggregation_git_commit": _git_commit(config.config_path.parent),
             "completed_at": datetime.now(UTC).isoformat(),
         }
         (temporary / "aggregation_manifest.json").write_text(
@@ -307,7 +310,13 @@ def aggregate_walk_forward_results(config: WalkForwardCampaignConfig) -> Path:
             encoding="utf-8",
         )
         (temporary / "walk_forward_report.md").write_text(
-            _format_report(summary, dispersion, improvement, frontier),
+            _format_report(
+                fold_metrics,
+                summary,
+                dispersion,
+                improvement,
+                frontier,
+            ),
             encoding="utf-8",
         )
         os.replace(temporary, destination)
@@ -627,7 +636,7 @@ def _overlay_frontier(metrics):
     return overlays
 
 
-def _format_report(summary, dispersion, improvement, frontier):
+def _format_report(fold_metrics, summary, dispersion, improvement, frontier):
     lines = [
         "# Nested Walk-Forward Campaign",
         "",
@@ -643,19 +652,46 @@ def _format_report(summary, dispersion, improvement, frontier):
         "",
         "## Aggregate Evidence",
         "",
-        "| Strategy | Positive folds | Median active return | Median active Sharpe | Worst active return | Median turnover | Cost drag |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "| Strategy | Positive folds | Median active return | Median active Sharpe | Worst active return | Drawdown difference | Median turnover | Cost drag |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summary.itertuples(index=False):
         lines.append(
             f"| {row.strategy} | {row.positive_active_return_fold_count}/4 | "
             f"{row.median_active_return:.2%} | {row.median_active_sharpe:.3f} | "
             f"{row.worst_fold_active_return:.2%} | "
+            f"{row.median_drawdown_difference:.2%} | "
             f"{row.median_average_weekly_turnover:.2%} | "
             f"{row.median_transaction_cost_drag:.2%} |"
         )
+    fold_table = fold_metrics[
+        fold_metrics["strategy"].isin(
+            [
+                ENSEMBLE,
+                *[f"ensemble_alpha_{alpha:.2f}" for alpha in (0.25, 0.5, 0.75, 1.0)],
+                PRIMARY_REFERENCE,
+                "inverse_volatility",
+                "momentum_top_3_63d",
+            ]
+        )
+    ][
+        [
+            "fold_id",
+            "strategy",
+            "total_return",
+            "active_return_vs_equal_weight",
+            "sharpe_ratio",
+            "drawdown_difference_vs_equal_weight",
+            "average_weekly_turnover",
+            "transaction_cost_drag",
+        ]
+    ]
     lines.extend(
         [
+            "",
+            "## Fold-Level Primary Results",
+            "",
+            _markdown_table(fold_table),
             "",
             "## Seed Dispersion",
             "",
@@ -759,6 +795,23 @@ def _verify_completed_fold(directory, config, fold_id, seeds):
         or manifest.get("campaign_config_sha256") != config.config_sha256
     ):
         raise ValueError(f"completed fold output conflicts with campaign: {directory}")
+    freeze_hashes = manifest.get("selection_freeze_sha256")
+    if not isinstance(freeze_hashes, dict):
+        raise TypeError("completed fold manifest has no selection freeze hashes")
+    for seed in seeds:
+        freeze = selection_output_dir(
+            config,
+            fold_id=fold_id,
+            seed=seed,
+            pilot=bool(manifest.get("pilot")),
+        ) / "selection_freeze.json"
+        if _sha256(freeze) != freeze_hashes.get(str(seed)):
+            raise ValueError(
+                f"completed fold selection-freeze hash mismatch: {fold_id}/{seed}"
+            )
+    for required in ("metrics.csv", "outer_evaluation_receipts.json"):
+        if not (directory / required).is_file():
+            raise FileNotFoundError(directory / required)
 
 
 def _difference(left, right):
@@ -773,3 +826,14 @@ def _sha256(path: str | Path) -> str:
         for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _git_commit(path: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
