@@ -43,7 +43,10 @@ fold-specific PPO seeds for each of four nested folds, evaluated only after
 selection freezes were written, and reported ensembles, partial-rebalance
 overlays, and frozen baselines. No candidate is selected: alpha 0.25 produced
 positive active return in three of four folds, while the unmodified ensemble did
-so in two of four. Phase 3A candidate qualification remains open pending PR 18.
+so in two of four. The canonical report exposes every alpha by fold, gross and
+net active returns, drawdown differences, cost drag, and alpha-0.25 comparisons
+with equal weight, inverse volatility, momentum, and buy-and-hold. Phase 3A
+candidate qualification remains open pending PR 18.
 The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.

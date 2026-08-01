@@ -20,8 +20,9 @@ realized split boundaries and row counts, the canonical feature contract, and
 strictly past-only context for 63-day trailing-return policies; PPO training
 is implemented in PR 17. All 20 fold/seed selections were frozen before outer
 evaluation; the fold-reset-aware report remains non-selective and carries every
-overlay into PR 18. The 2024 period is consumed development/selection data. A
-legacy Phase 2 model previously
+overlay into PR 18. It reports fold-level active return and Sharpe, drawdown
+differences, gross-versus-net cost effects, and transparent-rule comparisons.
+The 2024 period is consumed development/selection data. A legacy Phase 2 model previously
 accessed the repository's 2025+ test designation, so Phase 3B is blocked until
 PM/ML reviewers approve a new independent holdout.
 

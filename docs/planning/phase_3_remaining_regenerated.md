@@ -824,7 +824,11 @@ test_fold_artifact_hashes_are_stable
 was frozen from inner-validation evidence before its outer matrix was loaded.
 The outer report evaluates the fold-specific five-seed ensemble, all four
 partial-rebalance overlays, and the declared baselines from equal weight. No
-candidate is selected; PR 18 remains required.
+candidate is selected. The closing report records each alpha by fold, median and
+worst drawdown differences, cost drag, same-path gross active return, and alpha
+0.25 comparisons against equal weight, inverse volatility, 63-day top-three
+momentum, and buy-and-hold. It does not construct an uninterrupted chained NAV;
+PR 18 remains required.
 
 ### Goal
 
