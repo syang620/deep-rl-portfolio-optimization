@@ -70,9 +70,14 @@ class PartialRebalancePolicy:
             dtype=np.float64,
         )
         _validate_weights(raw_target, n_assets, "raw_policy_target")
-        executed_target = current_weights + self._alpha * (
-            raw_target - current_weights
-        )
+        if self._alpha == 0.0:
+            executed_target = current_weights.copy()
+        elif self._alpha == 1.0:
+            executed_target = raw_target.copy()
+        else:
+            executed_target = current_weights + self._alpha * (
+                raw_target - current_weights
+            )
         _validate_weights(executed_target, n_assets, "executed_target")
         self._records.append(
             PartialRebalanceRecord(

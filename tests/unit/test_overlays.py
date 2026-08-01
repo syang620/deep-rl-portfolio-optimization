@@ -51,7 +51,7 @@ def test_partial_rebalance_interpolates_from_live_current_weights() -> None:
 
 def test_alpha_one_is_exact_identity_for_raw_target() -> None:
     overlay = PartialRebalancePolicy(
-        base_policy=FixedPolicy([0.73, 0.27]),
+        base_policy=FixedPolicy([0.10346757024526596, 0.896532429754734]),
         alpha=1.0,
     )
 
@@ -63,7 +63,7 @@ def test_alpha_one_is_exact_identity_for_raw_target() -> None:
         },
     )
 
-    np.testing.assert_array_equal(target, [0.73, 0.27])
+    np.testing.assert_array_equal(target, [0.10346757024526596, 0.896532429754734])
     np.testing.assert_array_equal(
         overlay.records[0].raw_policy_target,
         overlay.records[0].executed_target,
