@@ -1,0 +1,42 @@
+schema_version: 1
+output_root: artifacts/walk_forward/data
+raw_history_start_date: "2007-01-01"
+maximum_feature_lookback_trading_days: 252
+
+sources:
+  asset_features:
+    path: data/processed/features_daily.parquet
+    sha256: b00ac3bfb5f57bdfae6113888df2323bbf97a62a723758e052522fdbb3e8a041
+  global_features:
+    path: data/processed/global_features_daily.parquet
+    sha256: 2c38f59f47f9718f196fcdbde8bf229ff295f200dd7160c4bb4cb10d114d3ec1
+  feature_spec:
+    path: artifacts/feature_specs/feature_spec_v1.json
+    sha256: 718f08bd336d02805c36434c110f2b362f31383b8c975985b34d925e11a48520
+  features_config:
+    path: configs/features.yaml
+    sha256: f65a2daa1c1cd2da6d035436ae3bf5b148c9568ae358ee030da13225929707fb
+  universe_config:
+    path: configs/universe.yaml
+    sha256: 4dda3053da6482113f9d99c1768ab0ee733238de1637743039699cd05455360a
+  data_config:
+    path: configs/data.yaml
+    sha256: 60145913417af517ccc8ade0db1a96e5dc19f1ae2688605b4160b02462365cb7
+
+folds:
+  - fold_id: WF1
+    inner_train: {start: "2010-01-01", end: "2014-12-31"}
+    inner_validation: {start: "2015-01-01", end: "2015-12-31"}
+    outer_evaluation: {start: "2016-01-01", end: "2017-12-31"}
+  - fold_id: WF2
+    inner_train: {start: "2010-01-01", end: "2016-12-31"}
+    inner_validation: {start: "2017-01-01", end: "2017-12-31"}
+    outer_evaluation: {start: "2018-01-01", end: "2019-12-31"}
+  - fold_id: WF3
+    inner_train: {start: "2010-01-01", end: "2018-12-31"}
+    inner_validation: {start: "2019-01-01", end: "2019-12-31"}
+    outer_evaluation: {start: "2020-01-01", end: "2021-12-31"}
+  - fold_id: WF4
+    inner_train: {start: "2010-01-01", end: "2020-12-31"}
+    inner_validation: {start: "2021-01-01", end: "2021-12-31"}
+    outer_evaluation: {start: "2022-01-01", end: "2023-12-31"}

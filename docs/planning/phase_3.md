@@ -13,10 +13,12 @@ implemented. The PR 14 partial-rebalancing frontier is also implemented for the
 predeclared 0.25, 0.50, 0.75, and 1.00 execution fractions; no alpha is selected
 from 2024. PR 15 dynamic-value controls are implemented for past-only and oracle
 static portfolios, a one-decision lag, and fixed 4-, 13-, and 26-decision
-circular shifts. The 2024 period is consumed development/selection data. A
-legacy Phase 2 model previously accessed the repository's 2025+ test
-designation, so Phase 3B is blocked until PM/ML reviewers approve a new
-independent holdout.
+circular shifts. PR 16 fold-specific walk-forward data artifacts are implemented
+with inner-training-only normalization and separate training/selection and
+outer-evaluation matrices; PPO training remains deferred to PR 17. The 2024
+period is consumed development/selection data. A legacy Phase 2 model previously
+accessed the repository's 2025+ test designation, so Phase 3B is blocked until
+PM/ML reviewers approve a new independent holdout.
 
 ---
 

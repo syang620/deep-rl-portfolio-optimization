@@ -6,12 +6,13 @@
 **Repository baseline:** `syang620/deep-rl-portfolio-optimization`
 **Latest reviewed Phase 3 commit:** `7ef06fa82a5a01e265f24c239a5e20f6db194947` — `Complete Phase 3 candidate validation and packaging`
 **Date:** 2026-07-27
-**Status:** Phase 3A remains open. PR 11 through PR 15 are implemented; PR 14
+**Status:** Phase 3A remains open. PR 11 through PR 16 are implemented; PR 14
 and PR 15 retain all four predeclared partial-rebalancing alphas for later
-walk-forward analysis rather than selecting from 2024. The turnover-v2 campaign
-has not accessed 2025+, but a legacy Phase 2 model has. Phase 3B is blocked
-until the remaining work and gates in this document are completed and PM/ML
-reviewers approve a new independent holdout.
+walk-forward analysis rather than selecting from 2024. PR 16 builds data
+artifacts only; training begins in PR 17. The turnover-v2 campaign has not
+accessed 2025+, but a legacy Phase 2 model has. Phase 3B is blocked until the
+remaining work and gates in this document are completed and PM/ML reviewers
+approve a new independent holdout.
 
 ---
 
@@ -707,6 +708,12 @@ That is still a valid research result, but it changes the project claim.
 ---
 
 ## PR 16 — Leakage-safe nested walk-forward artifact builder
+
+**Implementation status:** Complete. Four deterministic fold bundles are built
+from pre-normalization features. Winsorization and scaling are fit on each
+fold's inner-training rows only, and training/selection matrices are physically
+separated from outer-evaluation matrices. No PPO training or checkpoint
+selection occurs in this PR.
 
 ### Goal
 

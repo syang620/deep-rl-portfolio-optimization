@@ -31,10 +31,13 @@ execution fractions for the ensemble, with seed 42 as a secondary diagnostic,
 without selecting an alpha from 2024. PR 15 dynamic-value diagnostics compare
 the ensemble and all four execution fractions with past-only and oracle static
 portfolios, a one-decision lag, and fixed circular shifts. These diagnostics
-also remain non-selective. Phase 3A candidate qualification remains open. The
-2024 period is consumed development/selection data, and Phase 3B is blocked
-until PM/ML reviewers approve a new independent holdout because a legacy Phase
-2 model was previously evaluated on the repository's 2025+ test designation.
+also remain non-selective. The PR 16 nested walk-forward artifact builder now
+creates four fold-specific, inner-train-fitted scaler and model-matrix bundles
+with physically isolated training/selection and outer-evaluation views; it does
+not train PPO. Phase 3A candidate qualification remains open. The 2024 period
+is consumed development/selection data, and Phase 3B is blocked until PM/ML
+reviewers approve a new independent holdout because a legacy Phase 2 model was
+previously evaluated on the repository's 2025+ test designation.
 
 Turnover is defined as `0.5 * sum(abs(target - drifted current weights))`.
 The original campaign artifacts remain legacy results. The corrected five-seed
@@ -133,6 +136,8 @@ python scripts/run_turnover_overlay_study.py \
   --config configs/research/phase3_turnover_overlay.yaml
 python scripts/run_dynamic_value_checks.py \
   --config configs/research/phase3_dynamic_value.yaml
+python scripts/build_walk_forward_artifacts.py \
+  --config configs/walk_forward.yaml
 ```
 
 Generated data and experiment outputs are written under `data/` and

@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import pickle
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-import pickle
 
 import pandas as pd
 
 from portfolio_rl.config.schemas import FeaturesConfig
-
 
 DEFAULT_IDENTIFIER_COLUMNS = ("date", "ticker", "split", "feature_version")
 DEFAULT_ARTIFACT_PATH = Path("artifacts/scalers/feature_scaler_v1.pkl")
@@ -63,11 +62,20 @@ def fit_normalization_artifact(
     features: pd.DataFrame,
     feature_config: FeaturesConfig,
     identifier_columns: Sequence[str] = DEFAULT_IDENTIFIER_COLUMNS,
+    *,
+    fit_split: str | None = None,
 ) -> NormalizationArtifact:
     """Fit winsorization thresholds and standard-scaler stats on train rows only."""
-    _validate_features_for_fit(features, identifier_columns)
+    resolved_fit_split = fit_split or feature_config.normalization.fit_split
+    if not resolved_fit_split.strip():
+        raise ValueError("fit_split must not be empty")
+    _validate_features_for_fit(features, identifier_columns, resolved_fit_split)
     feature_columns = _feature_columns(features, identifier_columns)
-    train_features = _train_feature_frame(features, feature_columns)
+    train_features = _train_feature_frame(
+        features,
+        feature_columns,
+        resolved_fit_split,
+    )
 
     if feature_config.winsorization.enabled:
         lower = train_features.quantile(feature_config.winsorization.lower_quantile)
@@ -82,7 +90,7 @@ def fit_normalization_artifact(
 
     return NormalizationArtifact(
         feature_version=feature_config.feature_version,
-        fit_split=feature_config.normalization.fit_split,
+        fit_split=resolved_fit_split,
         feature_columns=list(feature_columns),
         winsorization_lower=lower.astype(float).to_dict(),
         winsorization_upper=upper.astype(float).to_dict(),
@@ -147,6 +155,7 @@ def load_normalization_artifact(
 def _validate_features_for_fit(
     features: pd.DataFrame,
     identifier_columns: Sequence[str],
+    fit_split: str,
 ) -> None:
     if "split" not in features.columns:
         raise ValueError("features must include a split column")
@@ -155,8 +164,8 @@ def _validate_features_for_fit(
     ]
     if missing_identifiers:
         raise ValueError(f"features are missing identifier columns: {missing_identifiers}")
-    if not (features["split"] == TRAIN_SPLIT).any():
-        raise ValueError("features must contain at least one train row")
+    if not (features["split"] == fit_split).any():
+        raise ValueError(f"features must contain at least one {fit_split} row")
 
 
 def _feature_columns(
@@ -173,8 +182,9 @@ def _feature_columns(
 def _train_feature_frame(
     features: pd.DataFrame,
     feature_columns: Sequence[str],
+    fit_split: str = TRAIN_SPLIT,
 ) -> pd.DataFrame:
-    train = features.loc[features["split"] == TRAIN_SPLIT, feature_columns].apply(
+    train = features.loc[features["split"] == fit_split, feature_columns].apply(
         pd.to_numeric,
         errors="raise",
     )
