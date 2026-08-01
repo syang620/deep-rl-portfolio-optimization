@@ -314,9 +314,12 @@ def format_dynamic_value_report(
             "ensemble itself was selected using 2024, so this is not a claim "
             "that the portfolio was actually deployable at the start of 2024."
         ),
+        "- Oracle static controls are non-deployable future-information diagnostics.",
         (
-            "- Oracle static and circular-shift controls are non-deployable. "
-            "Lagged and shifted controls replay executed targets for attribution."
+            "- Lagged and circularly shifted target-sequence controls are "
+            "non-deployable replay diagnostics. They test date alignment of "
+            "the original recommendations; they are not counterfactual "
+            "closed-loop PPO policies."
         ),
         "- No alpha is selected or eliminated; all four advance to walk-forward.",
         "- Final-test access: **none**.",
@@ -329,6 +332,57 @@ def format_dynamic_value_report(
             "target path. Ex-ante static weights average 2023 targets; oracle "
             "weights average 2024 targets; lag one begins equal weight; positive "
             "circular shifts use target `(t - shift) mod N`."
+        ),
+        "",
+        "### Ex-ante static portfolio provenance",
+        "",
+        (
+            f"- Source period: `{manifest.get('prior_start_date')}` through "
+            f"`{manifest.get('prior_end_date')}`."
+        ),
+        (
+            "- Construction rule: for each candidate, take the arithmetic mean "
+            "of its live-feedback executed weekly targets generated exclusively "
+            "inside the source period, then freeze the resulting asset weights."
+        ),
+        (
+            f"- Evaluation period: `{manifest.get('evaluation_start_date')}` "
+            f"through `{manifest.get('evaluation_end_date')}`."
+        ),
+        "- No 2024 target contributes to the ex-ante static weights.",
+        "",
+        "### Frozen ex-ante static weights",
+        "",
+        *_static_weights_table(result.target_sequences),
+        "",
+        "### Source models",
+        "",
+        *_model_hash_table(manifest),
+        "",
+        "### Static-control execution convention",
+        "",
+        (
+            "Both ex-ante and oracle static controls are weekly-rebalanced "
+            "constant-target portfolios, not buy-and-hold portfolios. Each "
+            "starts from the same equal-weight endowment at NAV 1.0, pays the "
+            "normal initial trade cost from equal weight to its static target, "
+            "and subsequently rebalances to that same frozen target every five "
+            "trading days. A static buy-and-hold control is deferred to the "
+            "walk-forward campaign."
+        ),
+        "",
+        "### Initial static-trade audit",
+        "",
+        *_initial_static_cost_table(result),
+        "",
+        "### Common execution contract",
+        "",
+        (
+            "Every candidate and control uses the same equal-weight starting "
+            "endowment, half-L1 turnover definition, 10 bps transaction cost, "
+            "five-trading-day rebalance clock, drift mechanics, and 2024 "
+            "evaluation dates. Return differences therefore do not arise from "
+            "different initial-cost conventions."
         ),
         "",
     ]
@@ -697,5 +751,57 @@ def _report_table(frame: pd.DataFrame) -> list[str]:
             f"{row.max_drawdown:.4%} | "
             f"{row.average_weekly_turnover:.4%} | "
             f"{row.transaction_cost_drag:.4%} |"
+        )
+    return lines
+
+
+def _static_weights_table(target_sequences: pd.DataFrame) -> list[str]:
+    static = target_sequences[
+        target_sequences["diagnostic"] == "ex_ante_static_2023"
+    ]
+    pivot = static.pivot_table(
+        index="candidate",
+        columns="ticker",
+        values="target_weight",
+        aggfunc="first",
+        sort=False,
+    )
+    lines = [
+        "| Candidate | " + " | ".join(str(column) for column in pivot.columns) + " |",
+        "| --- | " + " | ".join("---:" for _ in pivot.columns) + " |",
+    ]
+    for candidate, row in pivot.iterrows():
+        weights = " | ".join(f"{float(value):.8f}" for value in row)
+        lines.append(f"| {candidate} | {weights} |")
+    return lines
+
+
+def _model_hash_table(manifest: Mapping[str, Any]) -> list[str]:
+    lines = [
+        "| Seed | Model path | SHA-256 |",
+        "| ---: | --- | --- |",
+    ]
+    for member in manifest.get("members", []):
+        lines.append(
+            f"| {member['seed']} | `{member['model_path']}` | "
+            f"`{member['model_sha256']}` |"
+        )
+    if len(lines) == 2:
+        lines.append("| n/a | not recorded | not recorded |")
+    return lines
+
+
+def _initial_static_cost_table(result: DynamicValueResult) -> list[str]:
+    lines = [
+        "| Candidate | Initial turnover | Initial cost fraction |",
+        "| --- | ---: | ---: |",
+    ]
+    for (candidate, diagnostic), backtest in result.backtests.items():
+        if diagnostic != "ex_ante_static_2023":
+            continue
+        first_cost = backtest.costs.sort_values("date").iloc[0]
+        lines.append(
+            f"| {candidate} | {float(first_cost['turnover']):.6%} | "
+            f"{float(first_cost['transaction_cost_fraction']):.6%} |"
         )
     return lines

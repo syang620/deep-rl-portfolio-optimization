@@ -90,6 +90,17 @@ def test_dynamic_value_checks_execute_live_and_control_paths(
             "pr14_manifest_sha256": "abc123",
             "test_accessed": False,
             "alpha_selected": None,
+            "prior_start_date": "2023-01-02",
+            "prior_end_date": "2023-07-14",
+            "evaluation_start_date": "2024-01-02",
+            "evaluation_end_date": "2024-07-15",
+            "members": [
+                {
+                    "seed": 7,
+                    "model_path": "model.zip",
+                    "model_sha256": "def456",
+                }
+            ],
         },
     )
     assert all(path.exists() for path in outputs.values())
@@ -97,7 +108,12 @@ def test_dynamic_value_checks_execute_live_and_control_paths(
     assert "2024 is consumed development/selection data" in report
     assert "No alpha is selected or eliminated" in report
     assert "own live drifted portfolio" in report
-    assert "Oracle static and circular-shift controls are non-deployable" in report
+    assert "No 2024 target contributes" in report
+    assert "weekly-rebalanced constant-target portfolios" in report
+    assert "not counterfactual closed-loop PPO policies" in report
+    assert "half-L1 turnover definition" in report
+    assert "def456" in report
+    assert "Initial static-trade audit" in report
     with pytest.raises(FileExistsError):
         write_dynamic_value_artifacts(
             result=result,
