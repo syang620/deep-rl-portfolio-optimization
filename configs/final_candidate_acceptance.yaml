@@ -1,0 +1,107 @@
+schema_version: 1
+model_version: ppo_v1_ensemble5_alpha025_pretest_v1
+
+candidate:
+  policy_type: five_seed_mean_target_ensemble
+  seeds: [7, 42, 101, 202, 999]
+  ensemble_rule: arithmetic_mean_of_member_target_weights
+  partial_rebalance_alpha: 0.25
+  initial_portfolio: equal_weight
+  rebalance_frequency_trading_days: 5
+  transaction_cost_bps: 10.0
+  turnover_definition: half_l1_one_way
+  long_only: true
+  fully_invested: true
+
+primary_hurdle:
+  strategy: equal_weight_weekly
+  initial_portfolio: equal_weight
+  rebalance_frequency_trading_days: 5
+  transaction_cost_bps: 10.0
+
+hard_gates:
+  minimum_trading_days: 252
+  positive_active_return_vs_primary: true
+  positive_sharpe_difference_vs_primary: true
+  require_finite_metrics: true
+  require_positive_final_nav: true
+  require_no_artifact_hash_mismatch: true
+  require_no_test_overwrite: true
+  risk:
+    maximum_drawdown_deterioration_pp: 2.0
+    maximum_average_weekly_turnover: 0.05
+    maximum_annualized_transaction_cost_drag: 0.003
+  concentration:
+    maximum_single_asset_average_weight: 0.15
+    maximum_single_asset_peak_weight: 0.25
+    maximum_single_month_share_of_absolute_active_pnl: 0.35
+    maximum_single_asset_share_of_absolute_active_pnl: 0.40
+
+advisory_diagnostics:
+  - active_return_information_ratio
+  - active_return_hit_rate
+  - turnover_percentiles
+  - one_close_delay_result
+  - asset_tier_cost_result
+  - exposure_by_asset_class
+  - secondary_baseline_rank
+  - contribution_residual_reconciliation
+
+secondary_comparisons:
+  - buy_and_hold_equal_weight
+  - inverse_volatility
+  - momentum_63d_top3_equal_weight
+  - spy_only
+  - shy_only
+
+metric_definitions:
+  sharpe_difference_vs_primary: candidate_sharpe_minus_weekly_equal_weight_sharpe
+  annualized_transaction_cost_drag: cumulative_cost_fraction_times_252_over_trading_days
+  weight_concentration_basis: daily_pre_return_live_weights
+  monthly_active_pnl_basis: candidate_nav_change_minus_primary_nav_change
+  asset_active_pnl_basis: net_asset_contribution_with_costs_allocated_by_absolute_trade
+  insufficient_observations_result: inconclusive_not_pass
+
+governance:
+  development_period_label: 2024 consumed development/selection period
+  development_period_end: "2024-12-31"
+  candidate_campaign_test_accessed: false
+  project_test_history_clear: false
+  phase3b_authorized: false
+  phase3b_status: blocked
+  existing_test_designation: "2025+"
+  existing_test_independent: false
+  block_reason: Recorded legacy access before final candidate freeze
+  replacement_holdout_required: true
+  pm_ml_approval_required: true
+  acceptance_approval_status: approved
+  acceptance_approved_at: "2026-08-02"
+
+evidence_sources:
+  research_freeze:
+    path: artifacts/research_freeze/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926/freeze_manifest.json
+    sha256: 0ac16ba5d9793afb5301089c8cfa11bec1ea417d45b9997c3eceb10e7ea6b468
+  initialization_sensitivity:
+    path: artifacts/initialization_sensitivity/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926/run_manifest.json
+    sha256: 223d4bd27ecbc3adc935734799ec02d6364f029af562e81db7dd8ca7f9a2a5dc
+  ensemble:
+    path: artifacts/ensemble/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926/ensemble_manifest.json
+    sha256: ef53ada91957e823a6bbe3b4c2c357df6d08d532b4a6c98d5873f09140e70146
+  turnover_overlay:
+    path: artifacts/turnover_overlays/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926/overlay_manifest.json
+    sha256: c400647c04f8ce7ffcd86ce59ff89fda27129c252104ba702724f848b9cb662e
+  dynamic_value:
+    path: artifacts/dynamic_value/ppo_phase3_seed_sweep_turnover_v2_5ce122d9a926/dynamic_value_manifest.json
+    sha256: dbbdbd6cf125dedec9ba13338041fc403c86b86cdfd3b8590b5ecc9de2545747
+  walk_forward:
+    path: artifacts/walk_forward/results/ppo_walk_forward_v1/aggregate/aggregation_manifest.json
+    sha256: 0a01fe97cb35e05cc2f90d6c40c005b9aa992cbacf31259b2c40c17e4162b03a
+  walk_forward_metrics:
+    path: artifacts/walk_forward/results/ppo_walk_forward_v1/aggregate/fold_metrics.csv
+    sha256: cd300f5e8928c9d2dc633681b5e2422edd3b0899b67424fda75935cbca7efb9f
+  execution_stress:
+    path: artifacts/execution_stress/ppo_walk_forward_v1_pr18/execution_stress_manifest.json
+    sha256: a1094d1e6661a5c94d9b972651747eaefb4e89f30c8acefb1dd36313652d817a
+  regime_attribution:
+    path: artifacts/regime_attribution/ppo_walk_forward_v1_pr18/regime_attribution_manifest.json
+    sha256: cedddce0160517de1cda41a3c2d10fd652e2d2b9c1fb872c43fb89ad3b933b8f

@@ -1103,6 +1103,15 @@ artifacts/regime_attribution/{campaign_id}/
 
 ## PR 19 — Final candidate selection and pre-test freeze
 
+### Implementation status
+
+Implemented in code and configuration. The selected candidate is the ordered
+five-seed mean-target ensemble (`7, 42, 101, 202, 999`) with partial-rebalance
+alpha `0.25`, equal-weight initial endowment, five-trading-day decisions, and
+10 bps cost on half-L1 one-way turnover. The immutable canonical artifact must
+be generated from the clean PR 19 implementation commit. Phase 3B remains
+blocked pending PM/ML approval of a new independent holdout.
+
 ### Goal
 
 Choose one exact executable candidate and pre-register the final-test decision rules.
@@ -1123,18 +1132,19 @@ execution assumptions
 baseline hurdle
 ```
 
-Example candidate identity:
+Frozen candidate identity:
 
 ```text
 five-seed mean-weight ensemble
 equal-weight initial portfolio
-partial-rebalance alpha = 0.50
+partial-rebalance alpha = 0.25
 weekly decisions
 temperature 0.5 per member
 10 bps base one-way turnover cost
 ```
 
-The actual alpha must be selected from the predeclared walk-forward study, not from the final test.
+Alpha 0.25 was selected from the predeclared walk-forward and execution-stress
+evidence, not from a final test.
 
 ### Selection method
 
@@ -1168,11 +1178,18 @@ artifacts/pretest_freeze/{model_version}/
 ├── frozen_candidate.json
 ├── acceptance_criteria.yaml
 ├── freeze_manifest.json
+├── member_models.json
 ├── model_hashes.json
 ├── data_and_feature_hashes.json
+├── environment_and_training_hashes.json
+├── baseline_definitions.json
+├── candidate_construction.md
+├── evidence_summary.md
+├── known_limitations.md
 ├── commands.md
 ├── PM_review_packet.md
-└── test_access_audit.json
+├── test_access_audit.json
+└── README.md
 ```
 
 ### PM review packet

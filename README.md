@@ -55,8 +55,13 @@ candidate. The 2022-2023 attribution finds that alpha 0.25 sharply reduces
 turnover and improves drawdown versus alpha 1.00, but the past-only 2021 static
 weekly portfolio outperforms its dynamic WF4 path. This supports a strategic
 mix / insufficient-adaptation interpretation rather than claiming that damping
-created return by consistently avoiding noisy overreaction. PR 19 candidate
-selection remains open.
+created return by consistently avoiding noisy overreaction. PR 19 freezes the
+five-seed mean-target ensemble with a 25% partial-rebalancing overlay and an
+equal-weight initial endowment as the sole final-test candidate. Its hard gates,
+secondary comparisons, provenance checks, and non-executed final-test command
+are defined in `configs/final_candidate_acceptance.yaml`. The older packaged
+seed-42 model remains a representative research checkpoint; it is not the
+five-seed final-test candidate.
 The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.
