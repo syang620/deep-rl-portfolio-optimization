@@ -1,0 +1,32 @@
+schema_version: 1
+status: draft
+
+candidate:
+  frozen_candidate_path: artifacts/pretest_freeze/ppo_v1_ensemble5_alpha025_pretest_v1/frozen_candidate.json
+  candidate_manifest_sha256: 1480c8de2323fa8555e5fa4e8f9f5adfd39b465a742ac0bc43bff066dcc39edd
+
+holdout:
+  holdout_id: null
+  start_decision_date: null
+  end_decision_date: null
+  minimum_valid_rebalance_decisions: 50
+  expected_rebalance_frequency_trading_days: 5
+  performance_unseal_not_before: null
+  input_schema_version: null
+  data_source_contract_version: null
+  existing_test_designation: "2025+"
+
+inputs:
+  certification_manifest: null
+  trading_session_schedule: null
+  container_identity: null
+
+frozen_configs:
+  candidate_acceptance: configs/final_candidate_acceptance.yaml
+  holdout_registration: configs/phase3b/holdout_registration.yaml
+  access_control: configs/phase3b/access_control.yaml
+  execution: null
+  operations: null
+
+access_control_path: configs/phase3b/access_control.yaml
+output_root: artifacts/phase3b/registration

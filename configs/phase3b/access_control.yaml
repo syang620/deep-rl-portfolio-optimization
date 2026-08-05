@@ -1,0 +1,24 @@
+schema_version: 1
+status: draft
+signature_namespace: portfolio-rl-phase3b-registration-v1
+
+# Public keys only. Private signing keys must never enter this repository.
+approvers:
+  - role: portfolio_manager
+    name: null
+    principal: null
+    public_key_path: null
+    public_key_sha256: null
+    public_key_fingerprint: null
+  - role: independent_model_risk
+    name: null
+    principal: null
+    public_key_path: null
+    public_key_sha256: null
+    public_key_fingerprint: null
+  - role: data_ops_custodian
+    name: null
+    principal: null
+    public_key_path: null
+    public_key_sha256: null
+    public_key_fingerprint: null
