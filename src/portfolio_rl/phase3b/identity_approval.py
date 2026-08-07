@@ -33,6 +33,7 @@ from portfolio_rl.phase3b.operational_metrics import (
     decode_sealing_public_key,
     sealing_key_fingerprint,
 )
+from portfolio_rl.phase3b.public_identities import inspect_public_identities
 from portfolio_rl.phase3b.scaler_reconciliation import reconcile_frozen_scaler
 from portfolio_rl.phase3b.signatures import (
     create_signature_record,
@@ -143,6 +144,14 @@ def prepare_identity_approval(
             created_at=created_at,
         )
         _write_json(temporary / "identity_challenge.json", challenge)
+        _write_json(temporary / "challenge.json", challenge)
+        (temporary / "challenge.sha256").write_text(
+            sha256_file(temporary / "challenge.json") + "  challenge.json\n",
+            encoding="utf-8",
+        )
+        (temporary / "SIGNING_INSTRUCTIONS.md").write_text(
+            _signing_instructions(approval_id), encoding="utf-8"
+        )
         temporary.replace(output)
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
@@ -337,16 +346,24 @@ def _prepare_public_keys(root: Path, package: Path, config: dict[str, Any]) -> N
     sealing_source = resolve_path(
         root, _text(sealing["public_key_path"], "sealing public-key path")
     )
-    decode_sealing_public_key(sealing_source)
+    approver_sources = {
+        str(record["role"]): resolve_path(
+            root, _text(record["public_key_path"], "approver public-key path")
+        )
+        for record in records
+    }
+    inspect_public_identities(
+        service_signing_key=service_source,
+        performance_sealing_key=sealing_source,
+        approver_keys=approver_sources,
+    )
     shutil.copy2(sealing_source, key_dir / "performance_sealing.pub")
     for record in records:
         if set(record) != {"role", "name", "principal", "public_key_path"}:
             raise GovernanceError("identity approver schema mismatch")
         _text(record["name"], "approver name")
         _text(record["principal"], "approver principal")
-        source = resolve_path(
-            root, _text(record["public_key_path"], "approver public-key path")
-        )
+        source = approver_sources[str(record["role"])]
         fingerprint = ssh_public_key_fingerprint(source)
         if fingerprint in fingerprints:
             raise GovernanceError("service and approver SSH keys must be distinct")
@@ -355,7 +372,7 @@ def _prepare_public_keys(root: Path, package: Path, config: dict[str, Any]) -> N
 
 
 def _scaler_reconciliation(root: Path) -> dict[str, object]:
-    return reconcile_frozen_scaler(
+    payload = reconcile_frozen_scaler(
         scaler_path=root / "artifacts/scalers/feature_scaler_v1.pkl",
         feature_spec_path=root / "artifacts/feature_specs/feature_spec_v1.json",
         raw_asset_features_path=root / "data/processed/features_daily.parquet",
@@ -366,6 +383,16 @@ def _scaler_reconciliation(root: Path) -> dict[str, object]:
         / "data/processed/global_features_normalized_daily.parquet",
         model_matrix_path=root / "data/processed/model_matrix_daily.parquet",
     ).to_payload()
+    required_zero = (
+        "maximum_asset_normalization_error",
+        "maximum_global_normalization_error",
+        "maximum_model_matrix_error",
+    )
+    if payload.get("reconciled") is not True or payload.get("refit_performed") is not False:
+        raise GovernanceError("frozen scaler reconciliation did not pass")
+    if any(float(payload.get(key, float("inf"))) > 1e-12 for key in required_zero):
+        raise GovernanceError("frozen scaler reconciliation exceeds zero-error tolerance")
+    return payload
 
 
 def _governance_evidence(root: Path) -> dict[str, dict[str, Any]]:
@@ -623,6 +650,19 @@ def _challenge(
             "candidate_manifest_path": relative_path(root, candidate_manifest_path),
             "candidate_manifest_sha256": sha256_file(candidate_manifest_path),
         },
+        "frozen_contracts": {
+            "scaler_sha256": identity.scaler_sha256,
+            "feature_spec_sha256": identity.feature_spec_sha256,
+            "scaler_reconciliation_sha256": sha256_file(
+                package / "evidence/scaler_reconciliation.json"
+            ),
+            "cost_map_logical_sha256": identity.asset_tier_cost_map_sha256,
+            "execution_config_sha256": identity.execution_config_sha256,
+            "operations_config_sha256": identity.operations_config_sha256,
+            "access_control_config_sha256": identity.access_control_config_sha256,
+            "universe_config_path": "configs/universe.yaml",
+            "universe_config_sha256": sha256_file(root / "configs/universe.yaml"),
+        },
         "approvers": _approver_claims(package),
         "prepared_files": [_file_record(package, name) for name in PREPARED_FILES],
         "governance_evidence": evidence,
@@ -638,6 +678,11 @@ def _challenge(
 
 def _verify_prepared_package(package: Path) -> dict[str, Any]:
     challenge = read_json(package / "identity_challenge.json")
+    if read_json(package / "challenge.json") != challenge:
+        raise GovernanceError("canonical identity challenge copies differ")
+    expected_checksum = sha256_file(package / "challenge.json") + "  challenge.json\n"
+    if (package / "challenge.sha256").read_text(encoding="utf-8") != expected_checksum:
+        raise GovernanceError("identity challenge checksum mismatch")
     _verify_payload_hash(challenge, "challenge_payload_sha256", "identity challenge")
     if challenge.get("signature_namespace") != IDENTITY_APPROVAL_NAMESPACE:
         raise GovernanceError("identity challenge namespace mismatch")
@@ -651,6 +696,21 @@ def _verify_prepared_package(package: Path) -> dict[str, Any]:
         if sha256_file(path) != record["sha256"]:
             raise GovernanceError(f"identity prepared file hash mismatch: {record['path']}")
     return challenge
+
+
+def _signing_instructions(approval_id: str) -> str:
+    return f"""# External identity-approval signatures
+
+Approval package: `{approval_id}`
+
+Each authorized operator independently verifies `challenge.sha256`, reviews every
+bound identity and evidence hash, and then runs `sign_phase3b_identity_approval.py`
+with their own external private key and exact role. Private keys must remain
+outside the repository and package. The tooling never generates or copies them.
+
+Required roles: `portfolio_manager`, `independent_reviewer`, and
+`data_operations_custodian`. All three sign the identical canonical challenge.
+"""
 
 
 def _verify_current_evidence(
@@ -670,6 +730,13 @@ def _verify_current_evidence(
 def _verify_approvals(
     package: Path, challenge: dict[str, Any]
 ) -> list[dict[str, Any]]:
+    approval_dir = package / "approvals"
+    observed = {
+        path.name for path in approval_dir.iterdir() if path.is_file()
+    } if approval_dir.exists() else set()
+    expected = {f"{role}.json" for role in APPROVER_ROLES}
+    if observed != expected:
+        raise GovernanceError("identity approval signature inventory mismatch")
     claims = {row["role"]: row for row in challenge["approvers"]}
     results = []
     for role in APPROVER_ROLES:

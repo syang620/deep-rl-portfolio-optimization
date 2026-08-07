@@ -84,7 +84,10 @@ def build_certification_authorization_payload(
     *,
     certification_id: str,
     identity: CertificationIdentity,
-    first_scheduled_decision_date: date,
+    identity_package_manifest_sha256: str,
+    identity_package_finalized_sha256: str,
+    approved_start_date: date,
+    approved_end_date: date,
 ) -> dict[str, Any]:
     """Build the single canonical claim independently approved by three roles."""
     return {
@@ -93,8 +96,22 @@ def build_certification_authorization_payload(
         "certification_id": certification_id,
         "identity": asdict(identity),
         "identity_sha256": identity.identity_sha256,
-        "first_scheduled_decision_date": first_scheduled_decision_date.isoformat(),
+        "identity_package_manifest_sha256": identity_package_manifest_sha256,
+        "identity_package_finalized_sha256": identity_package_finalized_sha256,
+        "approved_start_window": {
+            "start_date": approved_start_date.isoformat(),
+            "end_date": approved_end_date.isoformat(),
+        },
         "required_consecutive_cycles": 4,
+        "rebalance_frequency_trading_days": 5,
+        "runtime_git_sha": identity.runtime_git_commit,
+        "container_digest": identity.container_image_digest,
+        "service_signing_fingerprint": identity.service_signing_fingerprint,
+        "scaler_sha256": identity.scaler_sha256,
+        "execution_config_sha256": identity.execution_config_sha256,
+        "operations_config_sha256": identity.operations_config_sha256,
+        "access_control_config_sha256": identity.access_control_config_sha256,
+        "cost_map_sha256": identity.asset_tier_cost_map_sha256,
         "canonical_holdout_registered": False,
     }
 
@@ -134,6 +151,23 @@ def verify_certification_authorization(
         raise GovernanceError("certification identity schema mismatch") from exc
     if payload.get("identity_sha256") != identity.identity_sha256:
         raise GovernanceError("certification identity hash mismatch")
+    if payload.get("required_consecutive_cycles") != 4:
+        raise GovernanceError("certification authorization must require four cycles")
+    if payload.get("rebalance_frequency_trading_days") != 5:
+        raise GovernanceError("certification authorization rebalance frequency mismatch")
+    expected_bindings = {
+        "runtime_git_sha": identity.runtime_git_commit,
+        "container_digest": identity.container_image_digest,
+        "service_signing_fingerprint": identity.service_signing_fingerprint,
+        "scaler_sha256": identity.scaler_sha256,
+        "execution_config_sha256": identity.execution_config_sha256,
+        "operations_config_sha256": identity.operations_config_sha256,
+        "access_control_config_sha256": identity.access_control_config_sha256,
+        "cost_map_sha256": identity.asset_tier_cost_map_sha256,
+    }
+    for key, expected in expected_bindings.items():
+        if payload.get(key) != expected:
+            raise GovernanceError(f"certification authorization {key} mismatch")
     if identity.scaler_sha256 != execution_config.normalization_artifact_sha256:
         raise GovernanceError("certification scaler differs from execution config")
     if identity.service_signing_fingerprint != execution_config.signing.public_key_fingerprint:
