@@ -82,6 +82,11 @@ assertions with hashed test-access, certification-registry, and
 holdout-registry evidence. Tracked configs remain draft; exact approved copies
 exist only inside a unanimously signed, finalized identity package. PR 22 does
 not register a canonical holdout or authorize performance unsealing.
+The remaining automation builds a local, non-pushed OCI certification image
+from one exact merged Git tree, validates public-only role identities, prepares
+a separate three-role certification authorization, and gates `--official` on a
+single fail-closed readiness check. Human approval and key custody remain
+explicit external actions.
 The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.

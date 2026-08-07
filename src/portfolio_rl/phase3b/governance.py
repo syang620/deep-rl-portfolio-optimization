@@ -205,9 +205,7 @@ def require_commit_exists(root: Path, commit: str) -> None:
 
 def validate_container_identity(payload: dict[str, Any], expected_commit: str) -> None:
     """Validate the immutable runner-container attestation."""
-    _require_keys(
-        payload,
-        {
+    base_keys = {
             "schema_version",
             "image_reference",
             "image_digest",
@@ -215,10 +213,26 @@ def validate_container_identity(payload: dict[str, Any], expected_commit: str) -
             "input_schema_version",
             "data_source_contract_version",
             "built_at",
-        },
-        "container identity",
-    )
-    if payload["schema_version"] != 1:
+        }
+    schema_version = payload.get("schema_version")
+    if schema_version == 1:
+        _require_keys(payload, base_keys, "container identity")
+    elif schema_version == 2:
+        _require_keys(
+            payload,
+            base_keys
+            | {
+                "base_image_digest",
+                "dependency_lock_sha256",
+                "platform",
+                "pr22_merge_sha",
+                "pyproject_sha256",
+                "python_version",
+                "runtime_identity_file_sha256",
+            },
+            "container identity",
+        )
+    else:
         raise GovernanceError("unsupported container identity schema")
     if (
         not isinstance(payload["image_reference"], str)
@@ -227,12 +241,29 @@ def validate_container_identity(payload: dict[str, Any], expected_commit: str) -
         raise GovernanceError("container image reference is unresolved")
     if not OCI_DIGEST_PATTERN.fullmatch(str(payload["image_digest"])):
         raise GovernanceError("container image digest must be an immutable OCI digest")
+    if not str(payload["image_reference"]).endswith("@" + str(payload["image_digest"])):
+        raise GovernanceError("mutable image tag cannot be authoritative identity")
     if payload["git_commit"] != expected_commit:
         raise GovernanceError("container image Git commit does not match current HEAD")
     _parse_datetime(payload["built_at"], "container built_at")
     for key in ("input_schema_version", "data_source_contract_version"):
         if not isinstance(payload[key], str) or not payload[key].strip():
             raise GovernanceError(f"container {key} is unresolved")
+    if schema_version == 2:
+        if not OCI_DIGEST_PATTERN.fullmatch(str(payload["base_image_digest"])):
+            raise GovernanceError("container base image must use an immutable OCI digest")
+        for key in (
+            "dependency_lock_sha256",
+            "pyproject_sha256",
+            "runtime_identity_file_sha256",
+        ):
+            if not SHA256_PATTERN.fullmatch(str(payload[key])):
+                raise GovernanceError(f"container {key} is invalid")
+        for key in ("platform", "python_version"):
+            if not isinstance(payload[key], str) or not payload[key].strip():
+                raise GovernanceError(f"container {key} is unresolved")
+        if not GIT_COMMIT_PATTERN.fullmatch(str(payload["pr22_merge_sha"])):
+            raise GovernanceError("container PR 22 merge SHA is invalid")
 
 
 def validate_schedule(

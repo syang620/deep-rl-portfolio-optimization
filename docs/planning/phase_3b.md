@@ -1340,6 +1340,20 @@ verified and the package is finalized.
 After the identity-tooling PR is merged and its container is built:
 
 ```bash
+python scripts/build_phase3b_certification_image.py \
+  --runtime-git-sha <identity-tooling-merge-sha>
+
+python scripts/verify_phase3b_runtime_identity.py \
+  --embedded-identity <extracted-or-mounted-runtime_identity.json> \
+  --container-identity artifacts/phase3b/container/container_identity.json
+
+python scripts/inspect_phase3b_public_identities.py \
+  --service-signing-key <external-service-public-key> \
+  --performance-sealing-key <external-curve25519-public-key> \
+  --portfolio-manager-key <external-pm-public-key> \
+  --independent-reviewer-key <external-reviewer-public-key> \
+  --data-operations-custodian-key <external-custodian-public-key>
+
 python scripts/prepare_phase3b_identity_approval.py \
   --config <completed-identity-input.yaml>
 
@@ -1353,11 +1367,55 @@ python scripts/finalize_phase3b_identity_approval.py \
 
 python scripts/verify_phase3b_identity_approval.py \
   --package artifacts/phase3b/identity_approval/<approval_id>
+
+python scripts/prepare_phase3b_certification_authorization.py \
+  --identity-package artifacts/phase3b/identity_approval/<approval_id> \
+  --certification-id <certification-id> \
+  --approved-start-date <YYYY-MM-DD> \
+  --approved-end-date <YYYY-MM-DD>
+
+python scripts/sign_phase3b_certification_authorization.py \
+  --package artifacts/phase3b/certification_authorization/<certification-id> \
+  --role <approval-role> \
+  --private-key <external-private-key>
+
+python scripts/finalize_phase3b_certification_authorization.py \
+  --package artifacts/phase3b/certification_authorization/<certification-id>
+
+python scripts/check_phase3b_certification_readiness.py \
+  --identity-package artifacts/phase3b/identity_approval/<approval_id> \
+  --certification-authorization artifacts/phase3b/certification_authorization/<certification-id> \
+  --container-identity artifacts/phase3b/container/container_identity.json \
+  --embedded-runtime-identity <runtime_identity.json> \
+  --certification-id <certification-id> \
+  --cycle-number 1 \
+  --decision-date <YYYY-MM-DD>
 ```
 
 Private keys are never generated or copied by this workflow. Official
 certification additionally requires the separately signed certification
 authorization and the finalized identity package.
+
+### Manual operator key custody
+
+The following are examples for authorized operators on a controlled system,
+outside this repository. They are documentation only; repository automation
+does not run them:
+
+```bash
+# One distinct Ed25519 key per SSH signing/approval identity.
+ssh-keygen -t ed25519 -f <external-key-store>/<identity-name>
+
+# Export only the .pub files to the identity inspection/preparation workflow.
+ssh-keygen -y -f <external-key-store>/<identity-name> > <public-export>.pub
+```
+
+The performance-sealing recipient must be an externally generated Curve25519
+public key whose private key remains with the authorized unseal custodian. It
+must not reuse the service or approval identities. Operators must validate all
+five public identities with `inspect_phase3b_public_identities.py` before
+preparing the challenge. The build writes a local OCI archive and immutable
+digest but never pushes it automatically.
 
 ---
 

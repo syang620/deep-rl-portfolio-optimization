@@ -1,0 +1,27 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG RUNTIME_GIT_SHA
+ARG PR22_MERGE_SHA
+ARG PYPROJECT_SHA256
+ARG DEPENDENCY_LOCK_SHA256
+
+LABEL org.opencontainers.image.revision=${RUNTIME_GIT_SHA} \
+      org.portfolio-rl.pr22-merge-sha=${PR22_MERGE_SHA} \
+      org.portfolio-rl.python-version="3.12.12" \
+      org.portfolio-rl.pyproject-sha256=${PYPROJECT_SHA256} \
+      org.portfolio-rl.dependency-lock-sha256=${DEPENDENCY_LOCK_SHA256}
+
+ENV PYTHONHASHSEED=0 \
+    PHASE3B_RUNTIME_GIT_SHA=${RUNTIME_GIT_SHA} \
+    PHASE3B_RUNTIME_IDENTITY_PATH=/opt/portfolio-rl/runtime_identity.json
+
+WORKDIR /opt/portfolio-rl/app
+COPY . .
+RUN python -m pip install --no-cache-dir --no-deps -r requirements-phase3b.lock \
+    && python -m pip install --no-cache-dir --no-deps . \
+    && python -m pip freeze --all | LC_ALL=C sort > /opt/portfolio-rl/dependency_inventory.txt \
+    && python -c "import hashlib,pathlib; p=pathlib.Path('/opt/portfolio-rl/dependency_inventory.txt'); print(hashlib.sha256(p.read_bytes()).hexdigest())" > /opt/portfolio-rl/dependency_inventory.sha256 \
+    && install -m 0444 runtime_identity.json /opt/portfolio-rl/runtime_identity.json
+
+ENTRYPOINT ["python"]

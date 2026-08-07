@@ -3,22 +3,15 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 from pathlib import Path
 
-from portfolio_rl.phase3b.certification import (
-    verify_certification_authorization,
-)
+from portfolio_rl.phase3b.certification_readiness import require_certification_readiness
 from portfolio_rl.phase3b.certification_runner import write_cycle_manifest
-from portfolio_rl.phase3b.execution import load_execution_config
 from portfolio_rl.phase3b.governance import (
     GovernanceError,
-    load_access_policy,
     read_json,
-    read_yaml,
-    resolve_path,
 )
-from portfolio_rl.phase3b.identity_approval import verify_identity_approval
-from portfolio_rl.phase3b.operational_metrics import load_operations_config
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -32,9 +25,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--official", action="store_true")
     parser.add_argument("--authorization")
-    parser.add_argument("--execution-config")
-    parser.add_argument("--operations-config")
     parser.add_argument("--identity-approval-package")
+    parser.add_argument("--container-identity")
+    parser.add_argument("--embedded-runtime-identity")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
     evidence = read_json(Path(args.evidence))
@@ -43,57 +36,39 @@ def main(argv: list[str] | None = None) -> None:
         if not all(
             (
                 args.authorization,
-                args.execution_config,
-                args.operations_config,
                 args.identity_approval_package,
+                args.container_identity,
+                args.embedded_runtime_identity,
             )
         ):
             raise GovernanceError(
-                "official certification requires authorization and approved configs"
+                "official certification requires finalized identity, authorization, and runtime identities"
             )
-        authorization = read_json(Path(args.authorization))
-        if set(authorization) != {"authorization", "approval_records"}:
-            raise GovernanceError("certification authorization envelope mismatch")
-        execution = load_execution_config(
-            Path(args.execution_config), repository_root=root, require_approved=True
-        )
-        operations = load_operations_config(
-            Path(args.operations_config), repository_root=root, require_approved=True
-        )
-        approved = verify_identity_approval(
+        authorization = require_certification_readiness(
             repository_root=root,
-            package_path=Path(args.identity_approval_package),
-            require_current_evidence=False,
+            identity_package_path=Path(args.identity_approval_package),
+            authorization_package_path=Path(args.authorization),
+            container_identity_path=Path(args.container_identity),
+            embedded_identity_path=Path(args.embedded_runtime_identity),
+            certification_id=args.certification_id,
+            decision_date=date.fromisoformat(args.decision_date),
+            cycle_number=args.cycle_number,
         )
-        if execution.config_path != approved.execution_config_path:
-            raise GovernanceError(
-                "official certification execution config is outside identity package"
-            )
-        if operations.config_path != approved.operations_config_path:
-            raise GovernanceError(
-                "official certification operations config is outside identity package"
-            )
-        load_access_policy(root, approved.access_control_path)
-        access = read_yaml(approved.access_control_path)
-        keys = {
-            record["role"]: resolve_path(root, record["public_key_path"])
-            for record in access["approvers"]
-        }
-        identity = verify_certification_authorization(
-            payload=authorization["authorization"],
-            approval_records=authorization["approval_records"],
-            approver_public_keys=keys,
-            execution_config=execution,
-            operations_config=operations,
-        )
-        if identity.identity_sha256 != identity_sha:
+        if authorization.identity.identity_sha256 != identity_sha:
             raise GovernanceError("cycle evidence uses a different approved identity")
-        if identity != approved.identity:
+    output_path = Path(args.output).resolve()
+    if args.official:
+        expected_root = (
+            root / "artifacts/phase3b/certification" / args.certification_id
+        ).resolve()
+        try:
+            output_path.relative_to(expected_root)
+        except ValueError as exc:
             raise GovernanceError(
-                "certification authorization differs from finalized identity package"
-            )
+                "official certification output must be inside its immutable registry"
+            ) from exc
     output = write_cycle_manifest(
-        path=Path(args.output),
+        path=output_path,
         certification_id=args.certification_id,
         cycle_number=args.cycle_number,
         identity_sha256=identity_sha,

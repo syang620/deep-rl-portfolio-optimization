@@ -1,0 +1,10 @@
+schema_version: 1
+status: ready_for_build
+base_image: python@sha256:2986c55feb36e6cae00fa1fefb454283e4b33f35e75ff8bdd123b134130be301
+python_version: 3.12.12
+platform: linux/amd64
+image_name: ghcr.io/syang620/deep-rl-portfolio-optimization/phase3b-certification
+output_oci_archive: artifacts/phase3b/container/phase3b-certification.oci.tar
+output_identity: artifacts/phase3b/container/container_identity.json
+output_runtime_identity: artifacts/phase3b/container/runtime_identity.json
+push: false
