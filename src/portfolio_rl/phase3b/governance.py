@@ -392,7 +392,12 @@ def validate_certification(
     certified_hashes = payload["frozen_config_hashes"]
     if not isinstance(certified_hashes, dict):
         raise GovernanceError("certification config hashes must be a mapping")
-    required_certified_configs = {"candidate_acceptance", "execution", "operations"}
+    required_certified_configs = {
+        "candidate_acceptance",
+        "access_control",
+        "execution",
+        "operations",
+    }
     if set(certified_hashes) != required_certified_configs:
         raise GovernanceError(
             "certification must bind acceptance, execution, and operations configs"
@@ -410,6 +415,10 @@ def validate_certification(
         "execution_config_sha256",
         "asset_tier_cost_map_sha256",
         "operations_config_sha256",
+        "access_control_config_sha256",
+        "candidate_manifest_sha256",
+        "feature_spec_sha256",
+        "performance_sealing_fingerprint",
     }
     _require_keys(identities, identity_keys, "certification approved identities")
     for key in (
@@ -417,6 +426,9 @@ def validate_certification(
         "execution_config_sha256",
         "asset_tier_cost_map_sha256",
         "operations_config_sha256",
+        "access_control_config_sha256",
+        "candidate_manifest_sha256",
+        "feature_spec_sha256",
     ):
         if not SHA256_PATTERN.fullmatch(str(identities[key])):
             raise GovernanceError(f"certification approved {key} is invalid")
@@ -430,6 +442,12 @@ def validate_certification(
         raise GovernanceError("certification approved execution config mismatch")
     if identities["operations_config_sha256"] != certified_hashes["operations"]:
         raise GovernanceError("certification approved operations config mismatch")
+    if identities["access_control_config_sha256"] != certified_hashes["access_control"]:
+        raise GovernanceError("certification approved access config mismatch")
+    if identities["candidate_manifest_sha256"] != candidate_manifest_sha256:
+        raise GovernanceError("certification approved candidate manifest mismatch")
+    if not str(identities["performance_sealing_fingerprint"]).startswith("SHA256:"):
+        raise GovernanceError("certification sealing fingerprint is invalid")
     if payload["performance_metrics_computed"] is not False:
         raise GovernanceError("certification must not compute holdout performance")
     completed_at = _parse_datetime(

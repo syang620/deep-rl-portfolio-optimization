@@ -10,7 +10,14 @@ from portfolio_rl.phase3b.certification import (
 )
 from portfolio_rl.phase3b.certification_runner import write_cycle_manifest
 from portfolio_rl.phase3b.execution import load_execution_config
-from portfolio_rl.phase3b.governance import GovernanceError, read_json
+from portfolio_rl.phase3b.governance import (
+    GovernanceError,
+    load_access_policy,
+    read_json,
+    read_yaml,
+    resolve_path,
+)
+from portfolio_rl.phase3b.identity_approval import verify_identity_approval
 from portfolio_rl.phase3b.operational_metrics import load_operations_config
 
 
@@ -27,19 +34,19 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--authorization")
     parser.add_argument("--execution-config")
     parser.add_argument("--operations-config")
-    parser.add_argument(
-        "--approver-public-key",
-        action="append",
-        default=[],
-        metavar="ROLE=PATH",
-    )
+    parser.add_argument("--identity-approval-package")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
     evidence = read_json(Path(args.evidence))
     identity_sha = str(evidence.get("identity_sha256"))
     if args.official:
         if not all(
-            (args.authorization, args.execution_config, args.operations_config)
+            (
+                args.authorization,
+                args.execution_config,
+                args.operations_config,
+                args.identity_approval_package,
+            )
         ):
             raise GovernanceError(
                 "official certification requires authorization and approved configs"
@@ -47,13 +54,31 @@ def main(argv: list[str] | None = None) -> None:
         authorization = read_json(Path(args.authorization))
         if set(authorization) != {"authorization", "approval_records"}:
             raise GovernanceError("certification authorization envelope mismatch")
-        keys = _role_paths(args.approver_public_key)
         execution = load_execution_config(
             Path(args.execution_config), repository_root=root, require_approved=True
         )
         operations = load_operations_config(
             Path(args.operations_config), repository_root=root, require_approved=True
         )
+        approved = verify_identity_approval(
+            repository_root=root,
+            package_path=Path(args.identity_approval_package),
+            require_current_evidence=False,
+        )
+        if execution.config_path != approved.execution_config_path:
+            raise GovernanceError(
+                "official certification execution config is outside identity package"
+            )
+        if operations.config_path != approved.operations_config_path:
+            raise GovernanceError(
+                "official certification operations config is outside identity package"
+            )
+        load_access_policy(root, approved.access_control_path)
+        access = read_yaml(approved.access_control_path)
+        keys = {
+            record["role"]: resolve_path(root, record["public_key_path"])
+            for record in access["approvers"]
+        }
         identity = verify_certification_authorization(
             payload=authorization["authorization"],
             approval_records=authorization["approval_records"],
@@ -63,6 +88,10 @@ def main(argv: list[str] | None = None) -> None:
         )
         if identity.identity_sha256 != identity_sha:
             raise GovernanceError("cycle evidence uses a different approved identity")
+        if identity != approved.identity:
+            raise GovernanceError(
+                "certification authorization differs from finalized identity package"
+            )
     output = write_cycle_manifest(
         path=Path(args.output),
         certification_id=args.certification_id,
@@ -78,16 +107,6 @@ def main(argv: list[str] | None = None) -> None:
     print(f"certification_cycle: {output}")
     print(f"official: {str(args.official).lower()}")
     print("canonical_holdout_registered: false")
-
-
-def _role_paths(values: list[str]) -> dict[str, Path]:
-    result: dict[str, Path] = {}
-    for value in values:
-        role, separator, path = value.partition("=")
-        if not separator or not role or not path or role in result:
-            raise GovernanceError("approver key must use unique ROLE=PATH syntax")
-        result[role] = Path(path)
-    return result
 
 
 if __name__ == "__main__":

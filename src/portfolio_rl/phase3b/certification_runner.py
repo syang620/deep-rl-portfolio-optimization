@@ -175,6 +175,8 @@ def write_cycle_manifest(
     scheduled_decision_missed: bool,
 ) -> Path:
     """Record a complete cycle; partial checks cannot count as official."""
+    if cycle_number not in {1, 2, 3, 4}:
+        raise GovernanceError("certification cycle number must be between one and four")
     if set(checks) != set(REQUIRED_CYCLE_CHECKS):
         raise GovernanceError("certification cycle check inventory mismatch")
     if set(artifact_bindings) != set(REQUIRED_CYCLE_ARTIFACTS) or any(
