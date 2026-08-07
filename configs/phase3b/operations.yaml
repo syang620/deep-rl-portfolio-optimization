@@ -1,0 +1,54 @@
+schema_version: 1
+status: draft
+
+certification:
+  required_consecutive_cycles: 4
+  rebalance_frequency_trading_days: 5
+  maximum_missed_scheduled_decisions: 2
+  official_authorization_required: true
+
+daily_close:
+  timezone: America/New_York
+  price_field: adjusted_close_total_return_proxy
+  snapshot_schema_version: phase3b_market_close_v1
+  require_service_signature: true
+
+sealed_ledger:
+  schema_version: phase3b_sealed_ledger_v1
+  algorithm: pynacl_sealed_box_curve25519xsalsa20poly1305
+  recipient_public_key_path: null
+  recipient_public_key_sha256: null
+  recipient_key_fingerprint: null
+  approval_status: pending_independent_approval
+  require_daily_custodian_checkpoint: true
+
+universe:
+  config_path: configs/universe.yaml
+  config_sha256: 4dda3053da6482113f9d99c1768ab0ee733238de1637743039699cd05455360a
+
+operational_visibility:
+  allowed_weight_types:
+    - member_target
+    - ensemble_target
+    - executed_target
+    - baseline_target
+    - execution_weight
+  forbidden_field_tokens:
+    - price
+    - pre_trade
+    - drifted
+    - current_weight
+    - return
+    - nav
+    - pnl
+    - contribution
+    - sharpe
+    - sortino
+    - drawdown
+    - ranking
+    - monthly
+
+output_roots:
+  development: artifacts/phase3b/development
+  certification: artifacts/phase3b/certification
+  holdout: artifacts/phase3b/holdouts

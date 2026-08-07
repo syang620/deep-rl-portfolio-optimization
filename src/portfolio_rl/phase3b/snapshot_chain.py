@@ -381,11 +381,9 @@ def _trailing_returns(
     if list(frame.columns) != ["date", *columns] or len(frame) != 63:
         raise GovernanceError("trailing-return payload schema mismatch")
     dates = tuple(pd.Timestamp(value).date() for value in frame["date"])
-    if list(dates) != sorted(set(dates)) or any(
-        value >= decision_date for value in dates
-    ):
+    if list(dates) != sorted(set(dates)) or any(value > decision_date for value in dates):
         raise GovernanceError(
-            "trailing returns must be unique, ordered, and strictly past"
+            "trailing returns must be unique, ordered, and no later than the decision close"
         )
     values = frame.loc[:, columns].to_numpy(dtype=np.float64)
     if not np.isfinite(values).all():

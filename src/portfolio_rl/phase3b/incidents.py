@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
+
+from portfolio_rl.phase3b.governance import (
+    GovernanceError,
+    canonical_json_bytes,
+    logical_json_sha256,
+    read_json,
+)
 
 
 class IncidentSeverity(StrEnum):
@@ -53,7 +62,7 @@ def incident_policy_payload() -> dict[str, object]:
             "final_outcome": "unanimous_three_of_three",
             "routine_incident_disposition": {
                 "minimum_approvals": 2,
-                "independent_model_risk_required": True,
+                "independent_reviewer_required": True,
             },
         },
         "required_incident_fields": [
@@ -67,3 +76,64 @@ def incident_policy_payload() -> dict[str, object]:
             "approver_disposition",
         ],
     }
+
+
+def record_no_trade_incident(
+    *,
+    path: Path,
+    incident_id: str,
+    incident_type: str,
+    affected_decisions: list[str],
+    root_cause: str,
+    hash_evidence: dict[str, str],
+    timestamp: datetime,
+) -> dict[str, object]:
+    """Append one immutable no-trade incident record."""
+    if timestamp.tzinfo is None:
+        raise GovernanceError("incident timestamp must be timezone-aware")
+    severity = (
+        IncidentSeverity.FATAL.value
+        if incident_type in FATAL_INCIDENTS
+        else IncidentSeverity.NONFATAL.value
+    )
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "incident_id": incident_id,
+        "timestamp": timestamp.astimezone(UTC).isoformat(),
+        "incident_type": incident_type,
+        "severity": severity,
+        "decision_action": "no_trade",
+        "affected_decisions": affected_decisions,
+        "root_cause": root_cause,
+        "remediation": "pending_approved_disposition",
+        "hash_evidence": hash_evidence,
+        "approver_disposition": None,
+    }
+    payload["incident_sha256"] = logical_json_sha256(payload)
+    if path.exists():
+        if read_json(path) != payload:
+            raise GovernanceError("incident record overwrite is forbidden")
+        return payload
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(canonical_json_bytes(payload))
+    return payload
+
+
+def reject_and_log_unseal_attempt(
+    *,
+    audit_path: Path,
+    requester: str,
+    reason: str,
+    timestamp: datetime,
+) -> None:
+    """Deny PR 22 performance access and leave an immutable audit record."""
+    record_no_trade_incident(
+        path=audit_path,
+        incident_id=f"unauthorized-unseal-{timestamp.astimezone(UTC).isoformat()}",
+        incident_type="early_access_to_sealed_performance",
+        affected_decisions=[],
+        root_cause=f"requester={requester}; reason={reason}",
+        hash_evidence={},
+        timestamp=timestamp,
+    )
+    raise GovernanceError("performance unsealing is not authorized in PR 22")

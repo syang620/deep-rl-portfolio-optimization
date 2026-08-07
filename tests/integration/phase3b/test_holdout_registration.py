@@ -105,7 +105,7 @@ def test_registration_rejects_wrong_role_signature(
     )
     approvals = _sign_challenge(challenge, fixture["private_keys"])
     shutil.copy2(
-        approvals / "data_ops_custodian.sig",
+        approvals / "data_operations_custodian.sig",
         approvals / "portfolio_manager.sig",
     )
 
@@ -365,6 +365,22 @@ def _registration_fixture(
         "schedule_sha256": sha256_file(artifacts / "schedule.json"),
         "frozen_config_hashes": config_hashes,
         "performance_metrics_computed": False,
+        "official": True,
+        "all_required_checks_passed": True,
+        "missed_scheduled_decisions": 0,
+        "cycle_manifest_hashes": [str(index) * 64 for index in range(1, 5)],
+        "approved_identities": {
+            "scaler_sha256": "6" * 64,
+            "service_signing_fingerprint": "SHA256:fixture",
+            "container_image_digest": container["image_digest"],
+            "runtime_git_commit": commit,
+            "feature_snapshot_schema_version": "phase3b-input-v1",
+            "execution_config_sha256": config_hashes["execution"],
+            "asset_tier_cost_map_sha256": "7" * 64,
+            "operations_config_sha256": config_hashes["operations"],
+        },
+        "canonical_holdout_registered": False,
+        "certification_artifacts_excluded_from_holdout": True,
         "certification_completed_at": "2029-12-28T18:00:00+00:00",
     }
     certification["manifest_payload_sha256"] = logical_json_sha256(certification)

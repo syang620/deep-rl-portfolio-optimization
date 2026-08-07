@@ -68,7 +68,15 @@ mean target, the alpha-0.25 executed target, one-close-delayed instructions, and
 a hash-chained point-in-time input/output inventory. Its canonical execution
 configuration remains draft pending independent approval of the serving scaler,
 service signing key, certification, and replacement holdout registration; it
-does not compute or reveal performance.
+does not compute or reveal performance. PR 22 adds the operational-certification
+contract, exact frozen-scaler reconciliation, signed close and execution
+artifacts, deterministic restricted restart state, a PyNaCl-encrypted
+append-only performance ledger with signed custodian checkpoints, and a strict
+performance-free operational projection. Development cycles remain nonofficial;
+four consecutive official cycles can begin only after all scaler, signing,
+container, Git, schema, execution, and cost-map identities receive the required
+three-role approval. PR 22 does not register a canonical holdout or authorize
+performance unsealing.
 The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.

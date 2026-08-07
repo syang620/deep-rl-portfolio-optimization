@@ -1150,19 +1150,28 @@ quantities at decision time.
 
 Support continuous operational oversight without revealing investment performance.
 
+**Implementation status:** code complete in PR 22; the canonical operations and
+execution configurations intentionally remain draft. No official certification
+cycle or canonical holdout has been created.
+
 ## 19.2 Files
 
 ```text
 src/portfolio_rl/phase3b/sealed_ledger.py
 src/portfolio_rl/phase3b/operational_metrics.py
 src/portfolio_rl/phase3b/certification.py
+src/portfolio_rl/phase3b/certification_runner.py
+src/portfolio_rl/phase3b/close_processor.py
+src/portfolio_rl/phase3b/market_close.py
+src/portfolio_rl/phase3b/operational_state.py
+src/portfolio_rl/phase3b/scaler_reconciliation.py
+src/portfolio_rl/phase3b/signatures.py
 scripts/run_phase3b_certification.py
+scripts/reconcile_phase3b_scaler.py
 scripts/verify_phase3b_ledger.py
 scripts/show_phase3b_operations.py
 configs/phase3b/operations.yaml
-tests/unit/phase3b/test_sealed_ledger.py
-tests/unit/phase3b/test_operational_metrics.py
-tests/integration/phase3b/test_certification.py
+tests/unit/phase3b/test_pr22_operations.py
 ```
 
 ## 19.3 Visible operational metrics
@@ -1211,13 +1220,73 @@ record authorized access attempts
 support independent root verification
 ```
 
-## 19.6 Certification command
+Entries are encrypted to an independently controlled Curve25519 recipient with
+PyNaCl `SealedBox`. The service signs each entry manifest, while the data and
+operations custodian signs daily checkpoints containing both the entry count and
+chain tip. Entry mutation breaks its content/signature verification; removal of
+the tail breaks the custodian checkpoint. The service-signing key cannot decrypt
+or authorize unsealing.
 
-```bash
-python scripts/run_phase3b_certification.py   --candidate-package artifacts/pretest_freeze/ppo_v1_ensemble5_alpha025_pretest_v1   --weeks 4   --output-root artifacts/phase3b/certification
+## 19.6 Execution and certification contract
+
+Every daily close uses a service-signed point-in-time price snapshot. If a
+weekly target is pending, the portfolio first earns the close-t to close-t+1
+return, then calculates turnover from the resulting drifted weights to the
+already signed target, charges cost, and makes the target effective after close
+t+1. Alpha is never recomputed at execution time. Buy-and-hold equal weight is
+an explicit no-trade control. Missing or invalid required input produces a
+logged no-trade incident.
+
+Official certification requires the exact approved identities for:
+
+```text
+frozen training scaler and 302-feature contract
+service signing public-key fingerprint
+container image digest
+runtime Git commit
+point-in-time feature snapshot schema
+execution configuration
+asset-tier cost map
+operations configuration and performance-sealing recipient
 ```
 
-## 19.7 Acceptance criteria
+Portfolio manager, independent reviewer, and data/operations custodian must
+sign the same authorization payload. A change in any identity resets the
+consecutive-cycle count. A cycle counts only when all ten operational checks and
+their bound artifact hashes are present. Four consecutive official cycles are
+required; three missed scheduled decisions invalidate certification/holdout
+validity. Development cycles may use draft identities but never count.
+
+The frozen training scaler has been reconciled without refitting against 3,522
+pre-2024 model-matrix rows: all 302 market features and the 316-element complete
+observation reproduce with zero numerical error. This is approval evidence only;
+it does not change the draft status in `configs/phase3b/execution.yaml`.
+
+## 19.7 Commands
+
+```bash
+python scripts/reconcile_phase3b_scaler.py
+
+python scripts/run_phase3b_certification.py \
+  --certification-id <certification_id> \
+  --cycle-number <1-4> \
+  --decision-date <YYYY-MM-DD> \
+  --execution-date <YYYY-MM-DD> \
+  --evidence <cycle_evidence.json> \
+  --output <cycle_manifest.json>
+
+python scripts/verify_phase3b_ledger.py \
+  --ledger-root <sealed_ledger> \
+  --service-public-key <service.pub> \
+  --custodian-public-key <custodian.pub>
+```
+
+Add `--official` only with the signed three-role certification authorization and
+approved execution/operations configurations. The command cannot register a
+holdout. Operational output must pass the configured recursive forbidden-field
+filter before display.
+
+## 19.8 Acceptance criteria
 
 ```text
 - Four consecutive certification decisions pass.
@@ -1226,6 +1295,14 @@ python scripts/run_phase3b_certification.py   --candidate-package artifacts/pret
 - Unauthorized unseal attempts fail.
 - Restart recovery is deterministic.
 - Incident policy is exercised in tests.
+- Draft scaler configurations cannot count toward certification.
+- The signed target is immutable and alpha is not recomputed at t+1.
+- Candidate and baselines share the execution-price snapshot.
+- Half-L1 turnover reconciles from live drifted weights.
+- Ledger mutation and tail deletion are detected.
+- Three missed scheduled decisions invalidate progress.
+- Certification artifacts are excluded from the future holdout.
+- No canonical holdout is registered by PR 22.
 ```
 
 ---
@@ -1255,7 +1332,8 @@ tests/integration/phase3b/test_final_report.py
 - Ledger root verifies.
 - Candidate and config hashes match registration.
 - No fatal incident exists.
-- Two-person unseal approval is present.
+- Unanimous portfolio-manager, independent-reviewer, and data-custodian unseal
+  approval is present.
 - Performance has not previously been unsealed.
 
 ## 20.4 Final metrics
