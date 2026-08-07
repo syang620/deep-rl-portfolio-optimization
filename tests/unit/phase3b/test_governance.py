@@ -76,7 +76,7 @@ def test_certification_rejects_performance_computation() -> None:
             frozen_config_hashes={
                 "candidate_acceptance": "a" * 64,
                 "execution": "e" * 64,
-                "operations": "o" * 64,
+                "operations": "f" * 64,
             },
         )
 
@@ -87,7 +87,7 @@ def test_incident_policy_requires_independent_risk_for_routine_incidents() -> No
     routine = policy["approval_rules"]["routine_incident_disposition"]
     assert routine == {
         "minimum_approvals": 2,
-        "independent_model_risk_required": True,
+        "independent_reviewer_required": True,
     }
     assert "future_data_access" in policy["fatal_incidents"]
 
@@ -162,9 +162,25 @@ def _certification() -> dict[str, object]:
         "frozen_config_hashes": {
             "candidate_acceptance": "a" * 64,
             "execution": "e" * 64,
-            "operations": "o" * 64,
+            "operations": "f" * 64,
         },
         "performance_metrics_computed": False,
+        "official": True,
+        "all_required_checks_passed": True,
+        "missed_scheduled_decisions": 0,
+        "cycle_manifest_hashes": [str(index) * 64 for index in range(1, 5)],
+        "approved_identities": {
+            "scaler_sha256": "6" * 64,
+            "service_signing_fingerprint": "SHA256:fixture",
+            "container_image_digest": f"sha256:{'c' * 64}",
+            "runtime_git_commit": "a" * 40,
+            "feature_snapshot_schema_version": "phase3b-input-v1",
+            "execution_config_sha256": "e" * 64,
+            "asset_tier_cost_map_sha256": "7" * 64,
+            "operations_config_sha256": "f" * 64,
+        },
+        "canonical_holdout_registered": False,
+        "certification_artifacts_excluded_from_holdout": True,
         "certification_completed_at": "2029-12-28T12:00:00+00:00",
     }
     payload["manifest_payload_sha256"] = logical_json_sha256(payload)

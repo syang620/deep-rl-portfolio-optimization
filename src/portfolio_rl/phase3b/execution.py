@@ -36,6 +36,17 @@ EXPECTED_ASSET_COST_BPS = {
     "VNQ": 10.0,
     "XLU": 8.0,
 }
+EXPECTED_SCALER_SHA256 = (
+    "0f842facb61abc148dbdafc7c62410cbbae36e9df367478996702b5f8568691d"
+)
+EXPECTED_FEATURE_SPEC_SHA256 = (
+    "718f08bd336d02805c36434c110f2b362f31383b8c975985b34d925e11a48520"
+)
+SCALER_APPROVAL_ROLES = (
+    "portfolio_manager",
+    "independent_reviewer",
+    "data_operations_custodian",
+)
 RECOMMENDATION_SIGNATURE_NAMESPACE = "portfolio-rl-phase3b-recommendation-v1"
 
 
@@ -68,6 +79,8 @@ class ExecutionConfig:
     asset_cost_bps: Mapping[str, float]
     signing: RecommendationSigningConfig
     output_root: Path
+    scaler_status: str = "draft_pending_registration"
+    scaler_approved_by: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,7 +153,7 @@ def load_execution_config(
             "live_state_schema_version",
             "market_feature_count",
             "trailing_return_rows",
-            "normalization_artifact",
+            "scaler",
         },
         "snapshot contract",
     )
@@ -148,18 +161,45 @@ def load_execution_config(
         raise GovernanceError("snapshot must contain exactly 302 market features")
     if snapshot["trailing_return_rows"] != 63:
         raise GovernanceError("snapshot must contain exactly 63 trailing return rows")
-    normalization = snapshot["normalization_artifact"]
+    normalization = snapshot["scaler"]
     _keys(
         normalization,
-        {"path", "sha256", "approval_status", "observed_unapproved_sha256"},
-        "normalization artifact",
+        {
+            "path",
+            "status",
+            "configured_hash",
+            "approved_hash",
+            "approved_by",
+            "feature_spec_hash",
+        },
+        "scaler artifact",
     )
-    if require_approved and normalization["approval_status"] != "approved":
-        raise GovernanceError("normalization artifact is not approved for serving")
-    scaler_path = _resolved(root, normalization["path"], "normalization artifact")
-    scaler_sha = _sha(normalization["sha256"], "normalization artifact")
+    scaler_status = str(normalization["status"])
+    configured_sha = _sha(normalization["configured_hash"], "configured scaler")
+    if configured_sha != EXPECTED_SCALER_SHA256:
+        raise GovernanceError("configured scaler is not the frozen training scaler")
+    if normalization["feature_spec_hash"] != EXPECTED_FEATURE_SPEC_SHA256:
+        raise GovernanceError("scaler feature specification hash mismatch")
+    approved_by = normalization["approved_by"]
+    if not isinstance(approved_by, list) or not all(
+        isinstance(role, str) for role in approved_by
+    ):
+        raise GovernanceError("scaler approved_by must be a list of roles")
+    if require_approved:
+        if scaler_status != "approved_for_phase3b":
+            raise GovernanceError("scaler is not approved for Phase 3B")
+        if normalization["approved_hash"] != configured_sha:
+            raise GovernanceError("approved scaler hash mismatch")
+        if len(approved_by) != len(SCALER_APPROVAL_ROLES) or set(approved_by) != set(
+            SCALER_APPROVAL_ROLES
+        ):
+            raise GovernanceError("scaler requires all three approval roles")
+    elif scaler_status not in {"draft_pending_registration", "approved_for_phase3b"}:
+        raise GovernanceError("unsupported scaler approval status")
+    scaler_path = _resolved(root, normalization["path"], "scaler artifact")
+    scaler_sha = configured_sha
     if sha256_file(scaler_path) != scaler_sha:
-        raise GovernanceError("normalization artifact hash mismatch")
+        raise GovernanceError("scaler artifact hash mismatch")
 
     timing = payload["decision_timing"]
     _keys(
@@ -255,6 +295,8 @@ def load_execution_config(
             namespace=RECOMMENDATION_SIGNATURE_NAMESPACE,
         ),
         output_root=output_root,
+        scaler_status=scaler_status,
+        scaler_approved_by=tuple(approved_by),
     )
 
 

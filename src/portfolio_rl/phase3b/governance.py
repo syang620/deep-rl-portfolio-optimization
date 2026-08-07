@@ -46,8 +46,8 @@ class ApprovalRole(StrEnum):
     """The three independent roles required to register the holdout."""
 
     PORTFOLIO_MANAGER = "portfolio_manager"
-    INDEPENDENT_MODEL_RISK = "independent_model_risk"
-    DATA_OPS_CUSTODIAN = "data_ops_custodian"
+    INDEPENDENT_REVIEWER = "independent_reviewer"
+    DATA_OPERATIONS_CUSTODIAN = "data_operations_custodian"
 
 
 @dataclass(frozen=True)
@@ -342,6 +342,13 @@ def validate_certification(
         "schedule_sha256",
         "frozen_config_hashes",
         "performance_metrics_computed",
+        "official",
+        "all_required_checks_passed",
+        "missed_scheduled_decisions",
+        "cycle_manifest_hashes",
+        "approved_identities",
+        "canonical_holdout_registered",
+        "certification_artifacts_excluded_from_holdout",
         "certification_completed_at",
         "manifest_payload_sha256",
     }
@@ -354,6 +361,23 @@ def validate_certification(
         raise GovernanceError("operational certification has not passed")
     if payload["cycle_count"] != 4:
         raise GovernanceError("operational certification requires four cycles")
+    if payload["official"] is not True:
+        raise GovernanceError("development cycles cannot satisfy certification")
+    if payload["all_required_checks_passed"] is not True:
+        raise GovernanceError("certification has incomplete operational checks")
+    if payload["missed_scheduled_decisions"] != 0:
+        raise GovernanceError("certification cycles must be consecutive and complete")
+    if payload["canonical_holdout_registered"] is not False:
+        raise GovernanceError("certification cannot register a canonical holdout")
+    if payload["certification_artifacts_excluded_from_holdout"] is not True:
+        raise GovernanceError("certification artifacts must be excluded from holdout")
+    cycle_hashes = payload["cycle_manifest_hashes"]
+    if (
+        not isinstance(cycle_hashes, list)
+        or len(cycle_hashes) != 4
+        or any(not SHA256_PATTERN.fullmatch(str(value)) for value in cycle_hashes)
+    ):
+        raise GovernanceError("certification must bind four cycle manifests")
     if payload["completed_decision_dates"] != certification_dates:
         raise GovernanceError("certification dates do not match the approved schedule")
     expected = {
@@ -376,6 +400,36 @@ def validate_certification(
     for name, value in certified_hashes.items():
         if frozen_config_hashes.get(name) != value:
             raise GovernanceError(f"certification config hash mismatch: {name}")
+    identities = payload["approved_identities"]
+    identity_keys = {
+        "scaler_sha256",
+        "service_signing_fingerprint",
+        "container_image_digest",
+        "runtime_git_commit",
+        "feature_snapshot_schema_version",
+        "execution_config_sha256",
+        "asset_tier_cost_map_sha256",
+        "operations_config_sha256",
+    }
+    _require_keys(identities, identity_keys, "certification approved identities")
+    for key in (
+        "scaler_sha256",
+        "execution_config_sha256",
+        "asset_tier_cost_map_sha256",
+        "operations_config_sha256",
+    ):
+        if not SHA256_PATTERN.fullmatch(str(identities[key])):
+            raise GovernanceError(f"certification approved {key} is invalid")
+    if not str(identities["service_signing_fingerprint"]).startswith("SHA256:"):
+        raise GovernanceError("certification service-signing fingerprint is invalid")
+    if identities["container_image_digest"] != container_digest:
+        raise GovernanceError("certification approved container identity mismatch")
+    if identities["runtime_git_commit"] != git_commit:
+        raise GovernanceError("certification approved Git identity mismatch")
+    if identities["execution_config_sha256"] != certified_hashes["execution"]:
+        raise GovernanceError("certification approved execution config mismatch")
+    if identities["operations_config_sha256"] != certified_hashes["operations"]:
+        raise GovernanceError("certification approved operations config mismatch")
     if payload["performance_metrics_computed"] is not False:
         raise GovernanceError("certification must not compute holdout performance")
     completed_at = _parse_datetime(

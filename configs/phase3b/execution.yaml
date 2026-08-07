@@ -14,11 +14,13 @@ snapshot_contract:
   live_state_schema_version: phase3b_live_weights_v1
   market_feature_count: 302
   trailing_return_rows: 63
-  normalization_artifact:
+  scaler:
     path: artifacts/scalers/feature_scaler_v1.pkl
-    sha256: null
-    approval_status: pending_independent_approval
-    observed_unapproved_sha256: 0f842facb61abc148dbdafc7c62410cbbae36e9df367478996702b5f8568691d
+    status: draft_pending_registration
+    configured_hash: 0f842facb61abc148dbdafc7c62410cbbae36e9df367478996702b5f8568691d
+    approved_hash: null
+    approved_by: []
+    feature_spec_hash: 718f08bd336d02805c36434c110f2b362f31383b8c975985b34d925e11a48520
 
 decision_timing:
   timezone: America/New_York

@@ -26,7 +26,7 @@ frozen_configs:
   holdout_registration: configs/phase3b/holdout_registration.yaml
   access_control: configs/phase3b/access_control.yaml
   execution: configs/phase3b/execution.yaml
-  operations: null
+  operations: configs/phase3b/operations.yaml
 
 access_control_path: configs/phase3b/access_control.yaml
 output_root: artifacts/phase3b/registration

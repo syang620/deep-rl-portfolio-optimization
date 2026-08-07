@@ -10,13 +10,13 @@ approvers:
     public_key_path: null
     public_key_sha256: null
     public_key_fingerprint: null
-  - role: independent_model_risk
+  - role: independent_reviewer
     name: null
     principal: null
     public_key_path: null
     public_key_sha256: null
     public_key_fingerprint: null
-  - role: data_ops_custodian
+  - role: data_operations_custodian
     name: null
     principal: null
     public_key_path: null

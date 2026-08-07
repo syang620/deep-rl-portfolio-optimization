@@ -177,11 +177,11 @@ def test_snapshot_rejects_future_trailing_return(
     fixture = _fixture(tmp_path, monkeypatch)
     returns_path = tmp_path / "inputs/trailing.parquet"
     frame = pd.read_parquet(returns_path)
-    frame.loc[frame.index[-1], "date"] = pd.Timestamp("2030-01-02")
+    frame.loc[frame.index[-1], "date"] = pd.Timestamp("2030-01-03")
     frame.to_parquet(returns_path, index=False)
     _refresh_snapshot_hashes(tmp_path, fixture["snapshot_manifest"], frame)
 
-    with pytest.raises(GovernanceError, match="strictly past"):
+    with pytest.raises(GovernanceError, match="no later than the decision close"):
         load_point_in_time_snapshot(
             manifest_path=fixture["snapshot_manifest"],
             repository_root=tmp_path,
