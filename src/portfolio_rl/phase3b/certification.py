@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from portfolio_rl.phase3b.execution import ExecutionConfig
+from portfolio_rl.phase3b.execution import EXPECTED_FEATURE_SPEC_SHA256, ExecutionConfig
 from portfolio_rl.phase3b.governance import (
     ApprovalRole,
     GovernanceError,
@@ -56,6 +56,10 @@ class CertificationIdentity:
     execution_config_sha256: str
     asset_tier_cost_map_sha256: str
     operations_config_sha256: str
+    access_control_config_sha256: str
+    candidate_manifest_sha256: str
+    feature_spec_sha256: str
+    performance_sealing_fingerprint: str
 
     @property
     def identity_sha256(self) -> str:
@@ -140,6 +144,15 @@ def verify_certification_authorization(
         raise GovernanceError("certification execution config hash mismatch")
     if identity.operations_config_sha256 != operations_config.config_sha256:
         raise GovernanceError("certification operations config hash mismatch")
+    if identity.candidate_manifest_sha256 != execution_config.candidate_manifest_sha256:
+        raise GovernanceError("certification candidate manifest hash mismatch")
+    if identity.feature_spec_sha256 != EXPECTED_FEATURE_SPEC_SHA256:
+        raise GovernanceError("certification feature specification hash mismatch")
+    if (
+        identity.performance_sealing_fingerprint
+        != operations_config.sealing_key_fingerprint
+    ):
+        raise GovernanceError("certification sealing recipient mismatch")
     if identity.asset_tier_cost_map_sha256 != logical_json_sha256(
         dict(execution_config.asset_cost_bps)
     ):

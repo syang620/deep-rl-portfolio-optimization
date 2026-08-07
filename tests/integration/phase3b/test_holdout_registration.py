@@ -350,6 +350,7 @@ def _registration_fixture(
     _write_json(artifacts / "container.json", container)
     config_hashes = {
         "candidate_acceptance": sha256_file(acceptance_path),
+        "access_control": sha256_file(access_path),
         "execution": sha256_file(execution_path),
         "operations": sha256_file(operations_path),
     }
@@ -378,6 +379,10 @@ def _registration_fixture(
             "execution_config_sha256": config_hashes["execution"],
             "asset_tier_cost_map_sha256": "7" * 64,
             "operations_config_sha256": config_hashes["operations"],
+            "access_control_config_sha256": config_hashes["access_control"],
+            "candidate_manifest_sha256": EXPECTED_CANDIDATE_MANIFEST_SHA256,
+            "feature_spec_sha256": "8" * 64,
+            "performance_sealing_fingerprint": "SHA256:sealing-fixture",
         },
         "canonical_holdout_registered": False,
         "certification_artifacts_excluded_from_holdout": True,

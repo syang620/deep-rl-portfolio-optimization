@@ -1305,6 +1305,60 @@ filter before display.
 - No canonical holdout is registered by PR 22.
 ```
 
+## 19.9 Pre-certification runtime identity approval
+
+Identity approval and certification authorization are separate controls:
+
+```text
+Identity approval:
+    These exact runtime identities and configs are approved.
+
+Certification authorization:
+    These already approved identities may begin official cycle 1 now.
+```
+
+The identity package records:
+
+```yaml
+provenance:
+  pr22_merge_sha: <PR 22 merge commit>
+  identity_tooling_merge_sha: <authoritative runtime/tooling merge commit>
+  container_digest: <image built from identity_tooling_merge_sha>
+```
+
+The tooling merge must be on `origin/main`, descend from the recorded PR 22
+merge, and match the container's runtime Git identity. Boolean governance claims
+are supported by immutable hashes for a fresh test-access audit, certification
+registry inventory, and holdout registry inventory. Preparation and finalization
+both fail if those states differ.
+
+Tracked configuration templates remain draft. Preparation writes exact proposed
+approved copies into an ignored artifact package. Those copies become usable for
+official certification only after three distinct external SSH signatures are
+verified and the package is finalized.
+
+After the identity-tooling PR is merged and its container is built:
+
+```bash
+python scripts/prepare_phase3b_identity_approval.py \
+  --config <completed-identity-input.yaml>
+
+python scripts/sign_phase3b_identity_approval.py \
+  --package artifacts/phase3b/identity_approval/<approval_id> \
+  --role <approval-role> \
+  --private-key <external-private-key>
+
+python scripts/finalize_phase3b_identity_approval.py \
+  --package artifacts/phase3b/identity_approval/<approval_id>
+
+python scripts/verify_phase3b_identity_approval.py \
+  --package artifacts/phase3b/identity_approval/<approval_id>
+```
+
+Private keys are never generated or copied by this workflow. Official
+certification additionally requires the separately signed certification
+authorization and the finalized identity package.
+
 ---
 
 # 20. PR 23 — Authorized Unseal and Final Decision Report

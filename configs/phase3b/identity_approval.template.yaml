@@ -1,0 +1,35 @@
+schema_version: 1
+status: draft
+approval_id: null
+pr22_merge_sha: f53f64afeff1638302977b1f7b30979f488fcd43
+
+container_identity_path: null
+
+service_signing:
+  principal: null
+  public_key_path: null
+
+performance_sealing:
+  public_key_path: null
+
+approvers:
+  - role: portfolio_manager
+    name: null
+    principal: null
+    public_key_path: null
+  - role: independent_reviewer
+    name: null
+    principal: null
+    public_key_path: null
+  - role: data_operations_custodian
+    name: null
+    principal: null
+    public_key_path: null
+
+draft_configs:
+  execution: configs/phase3b/execution.yaml
+  operations: configs/phase3b/operations.yaml
+  access_control: configs/phase3b/access_control.yaml
+
+pretest_package: artifacts/pretest_freeze/ppo_v1_ensemble5_alpha025_pretest_v1
+output_root: artifacts/phase3b/identity_approval

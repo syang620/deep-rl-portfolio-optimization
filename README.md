@@ -75,8 +75,13 @@ append-only performance ledger with signed custodian checkpoints, and a strict
 performance-free operational projection. Development cycles remain nonofficial;
 four consecutive official cycles can begin only after all scaler, signing,
 container, Git, schema, execution, and cost-map identities receive the required
-three-role approval. PR 22 does not register a canonical holdout or authorize
-performance unsealing.
+three-role approval. The pre-certification identity tooling records the PR 22
+merge separately from the later authoritative tooling-merge/runtime commit,
+binds the container to that runtime commit, and backs its no-access/no-start
+assertions with hashed test-access, certification-registry, and
+holdout-registry evidence. Tracked configs remain draft; exact approved copies
+exist only inside a unanimously signed, finalized identity package. PR 22 does
+not register a canonical holdout or authorize performance unsealing.
 The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.

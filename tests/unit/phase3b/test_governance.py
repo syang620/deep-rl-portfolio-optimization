@@ -75,6 +75,7 @@ def test_certification_rejects_performance_computation() -> None:
             certification_dates=payload["completed_decision_dates"],
             frozen_config_hashes={
                 "candidate_acceptance": "a" * 64,
+                "access_control": "9" * 64,
                 "execution": "e" * 64,
                 "operations": "f" * 64,
             },
@@ -161,6 +162,7 @@ def _certification() -> dict[str, object]:
         "schedule_sha256": "d" * 64,
         "frozen_config_hashes": {
             "candidate_acceptance": "a" * 64,
+            "access_control": "9" * 64,
             "execution": "e" * 64,
             "operations": "f" * 64,
         },
@@ -178,6 +180,10 @@ def _certification() -> dict[str, object]:
             "execution_config_sha256": "e" * 64,
             "asset_tier_cost_map_sha256": "7" * 64,
             "operations_config_sha256": "f" * 64,
+            "access_control_config_sha256": "9" * 64,
+            "candidate_manifest_sha256": "b" * 64,
+            "feature_spec_sha256": "8" * 64,
+            "performance_sealing_fingerprint": "SHA256:sealing-fixture",
         },
         "canonical_holdout_registered": False,
         "certification_artifacts_excluded_from_holdout": True,
