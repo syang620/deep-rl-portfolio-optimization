@@ -61,7 +61,14 @@ equal-weight initial endowment as the sole final-test candidate. Its hard gates,
 secondary comparisons, provenance checks, and non-executed final-test command
 are defined in `configs/final_candidate_acceptance.yaml`. The older packaged
 seed-42 model remains a representative research checkpoint; it is not the
-five-seed final-test candidate.
+five-seed final-test candidate. PR 20 provides fail-closed holdout registration,
+and PR 21 provides the deterministic signed shadow-decision runner for the
+candidate and all frozen baselines. The runner records five member targets, the
+mean target, the alpha-0.25 executed target, one-close-delayed instructions, and
+a hash-chained point-in-time input/output inventory. Its canonical execution
+configuration remains draft pending independent approval of the serving scaler,
+service signing key, certification, and replacement holdout registration; it
+does not compute or reveal performance.
 The 2024 period is consumed development/selection data, and Phase 3B is blocked
 until PM/ML reviewers approve a new independent holdout because a legacy Phase
 2 model was previously evaluated on the repository's 2025+ test designation.

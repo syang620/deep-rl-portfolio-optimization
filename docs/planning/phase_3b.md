@@ -1063,6 +1063,13 @@ artifacts/phase3b/registration/{holdout_id}/
 
 Generate candidate and baseline recommendations from one point-in-time snapshot under the frozen execution contract.
 
+**Implementation status:** code complete in PR 21; operational use remains
+blocked. `configs/phase3b/execution.yaml` intentionally remains `draft` until
+the normalized serving scaler and recommendation-signing identity receive
+independent approval and a replacement holdout is registered after
+certification. PR 21 does not register a holdout, begin certification, access
+the contaminated 2025+ designation, or compute performance.
+
 ## 18.2 Files
 
 ```text
@@ -1098,15 +1105,29 @@ tests/integration/phase3b/test_shadow_runner.py
 ```text
 artifacts/phase3b/holdouts/{holdout_id}/decisions/{decision_id}/
 ├── input_snapshot_manifest.json
+├── input_live_state_manifest.json
 ├── feature_payload.parquet
+├── trailing_log_returns.parquet
 ├── member_targets.parquet
 ├── ensemble_target.parquet
 ├── executed_target.parquet
 ├── baseline_targets.parquet
 ├── current_weights.parquet
+├── execution_instructions.json
 ├── recommendation_manifest.json
+├── recommendation_manifest.sig
 └── incident_record.json
 ```
+
+The feature payload contains exactly 302 normalized market features. The same
+live candidate weights append the remaining 14 observation values passed to
+all five frozen members. The snapshot also carries exactly 63 strictly past
+return rows for inverse-volatility and momentum baselines. Each recommendation
+manifest records physical and logical hashes, the approved candidate and
+baseline identities, container identity, execution-config hash, prior chain
+hash, and an SSH signature. Turnover and costs remain pending until close t+1,
+when live drifted weights exist; the shadow runner does not fabricate those
+quantities at decision time.
 
 ## 18.5 Acceptance criteria
 

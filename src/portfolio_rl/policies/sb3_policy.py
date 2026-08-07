@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 
@@ -37,12 +38,14 @@ class SB3WeightPolicy:
 def load_sb3_weight_policy(
     model_path: str | Path,
     action_temperature: float,
+    *,
+    device: str = "auto",
 ) -> SB3WeightPolicy:
     """Load a saved SB3 PPO model as a deterministic target-weight policy."""
     from stable_baselines3 import PPO
 
     return SB3WeightPolicy(
-        model=PPO.load(Path(model_path)),
+        model=PPO.load(Path(model_path), device=device),
         action_temperature=action_temperature,
     )
 

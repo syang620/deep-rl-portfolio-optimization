@@ -1,0 +1,56 @@
+schema_version: 1
+status: draft
+
+candidate:
+  model_version: ppo_v1_ensemble5_alpha025_pretest_v1
+  candidate_manifest_sha256: 1480c8de2323fa8555e5fa4e8f9f5adfd39b465a742ac0bc43bff066dcc39edd
+
+inference:
+  device: cpu
+  deterministic: true
+
+snapshot_contract:
+  feature_payload_schema_version: phase3b_normalized_features_v1
+  live_state_schema_version: phase3b_live_weights_v1
+  market_feature_count: 302
+  trailing_return_rows: 63
+  normalization_artifact:
+    path: artifacts/scalers/feature_scaler_v1.pkl
+    sha256: null
+    approval_status: pending_independent_approval
+    observed_unapproved_sha256: 0f842facb61abc148dbdafc7c62410cbbae36e9df367478996702b5f8568691d
+
+decision_timing:
+  timezone: America/New_York
+  recommendation_cutoff_local: "10:00:00"
+  execution_delay_closes: 1
+
+costs:
+  turnover_definition: half_l1_one_way
+  primary_flat_bps: 10.0
+  asset_tier_role: stress_advisory
+  asset_cost_bps:
+    SPY: 5.0
+    QQQ: 5.0
+    IWM: 8.0
+    EFA: 8.0
+    EEM: 12.0
+    TLT: 7.0
+    IEF: 5.0
+    SHY: 3.0
+    LQD: 8.0
+    HYG: 12.0
+    GLD: 8.0
+    DBC: 15.0
+    VNQ: 10.0
+    XLU: 8.0
+
+recommendation_signing:
+  namespace: portfolio-rl-phase3b-recommendation-v1
+  principal: null
+  public_key_path: null
+  public_key_sha256: null
+  public_key_fingerprint: null
+  approval_status: pending_independent_approval
+
+output_root: artifacts/phase3b/holdouts

@@ -25,7 +25,7 @@ frozen_configs:
   candidate_acceptance: configs/final_candidate_acceptance.yaml
   holdout_registration: configs/phase3b/holdout_registration.yaml
   access_control: configs/phase3b/access_control.yaml
-  execution: null
+  execution: configs/phase3b/execution.yaml
   operations: null
 
 access_control_path: configs/phase3b/access_control.yaml
